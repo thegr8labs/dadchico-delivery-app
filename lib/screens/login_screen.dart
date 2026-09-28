@@ -23,11 +23,13 @@ class LoginScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 40),
-            Text("Welcome Back 👋", style: AppStyle.heading1),
+            const SizedBox(height: 8),
+            Image.asset('assets/brand/logo.png', height: 40),
+            const SizedBox(height: 36),
+            Text("Welcome back", style: AppStyle.heading1),
             const SizedBox(height: 8),
             Text(
-              "Enter your credentials to login to your delivery account.",
+              "Sign in to your Dadchico delivery partner account.",
               style: AppStyle.subtitle,
             ),
             const SizedBox(height: 40),

@@ -157,9 +157,6 @@ class HomeController extends GetxController {
       nextLng = delivery.customerLocation.longitude;
     }
 
-    print(
-      "MAPPING ORDER: ${delivery.orderId.orderNumber}, CUSTOMER: ${delivery.orderId.customerName}",
-    );
     return {
       'delivery_id': delivery.id,
       'id': delivery.orderId.orderNumber,
@@ -179,7 +176,18 @@ class HomeController extends GetxController {
                 delivery.pickupSummary.totalVendors
           : 0.0,
       'all_picked': delivery.pickupSummary.allPicked,
+      'picked_count': delivery.pickupSummary.pickedVendors,
       'stops': stops,
+      // Payment & invoice details for the driver
+      'is_cod': delivery.orderId.isCashOnDelivery,
+      'is_paid': delivery.orderId.isPaid,
+      'payment_method': delivery.orderId.paymentMethod,
+      'subtotal': delivery.orderId.subtotal,
+      'shipping': delivery.orderId.shipping,
+      'discount': delivery.orderId.discount,
+      'line_items': delivery.orderId.items,
+      'placed_at': delivery.orderId.placedAt,
+      'address': delivery.customerLocation.address,
     };
   }
 

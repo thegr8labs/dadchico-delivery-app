@@ -51,20 +51,25 @@ class _SplashScreenState extends State<SplashScreen> {
                   )
                 ],
               ),
-              child: const Icon(
-                Icons.delivery_dining_rounded,
-                size: 80,
-                color: AppColors.primaryGreen,
+              child: Image.asset(
+                'assets/brand/logo_mark.png',
+                width: 88,
+                height: 88,
               ),
             ).animate().scale(duration: 600.ms, curve: Curves.easeOutBack).fadeIn(),
             const SizedBox(height: 24),
+            Image.asset('assets/brand/logo_white.png', height: 40)
+                .animate()
+                .fadeIn(delay: 400.ms)
+                .moveY(begin: 20, end: 0),
+            const SizedBox(height: 10),
             Text(
-              "DELIVERY APP",
-              style: AppStyle.heading1.copyWith(
-                color: Colors.white,
-                letterSpacing: 4,
+              "Delivery Partner",
+              style: AppStyle.subtitle.copyWith(
+                color: Colors.white.withOpacity(0.9),
+                letterSpacing: 1.5,
               ),
-            ).animate().fadeIn(delay: 400.ms).moveY(begin: 20, end: 0),
+            ).animate().fadeIn(delay: 600.ms),
           ],
         ),
       ),
