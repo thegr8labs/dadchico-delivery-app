@@ -20,13 +20,35 @@ class TopBanner extends StatelessWidget {
               ? AppColors.primaryGreen
               : Colors.grey,
         ),
-        child: Center(
-          child: Text(
-            controller.isOnline.value ? "Online" : "Offline",
-            style: AppStyle.title.copyWith(
-              color: Colors.white,
-              letterSpacing: 1.1,
-            ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Row(
+            children: [
+              Image.asset('assets/brand/logo_white.png', height: 24),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      controller.isOnline.value ? "Online" : "Offline",
+                      style: AppStyle.subtitle.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),

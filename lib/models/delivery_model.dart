@@ -111,6 +111,13 @@ class OrderId {
   final String id;
   final String orderNumber;
   final String paymentStatus;
+  final String paymentMethod;
+  final String deliveryType;
+  final double subtotal;
+  final double shipping;
+  final double discount;
+  final List<OrderLineItem> items;
+  final DateTime? placedAt;
   final String customerName;
   final String phone;
   final double totalPrice;
@@ -119,6 +126,13 @@ class OrderId {
     required this.id,
     required this.orderNumber,
     required this.paymentStatus,
+    this.paymentMethod = '',
+    this.deliveryType = 'delivery',
+    this.subtotal = 0,
+    this.shipping = 0,
+    this.discount = 0,
+    this.items = const [],
+    this.placedAt,
     required this.customerName,
     required this.phone,
     required this.totalPrice,
@@ -163,6 +177,57 @@ class OrderId {
       phone: json['shippingAddress']?['phone'] ?? json['phone'] ?? '',
       totalPrice: (json['pricing']?['total'] ?? json['total'] ?? 0).toDouble(),
       paymentStatus: json['payment']?['status'] ?? '',
+      paymentMethod: (json['payment']?['method'] ?? '').toString(),
+      deliveryType: (json['deliveryType'] ?? 'delivery').toString(),
+      subtotal: _num(json['pricing']?['subtotal']),
+      shipping: _num(json['pricing']?['shipping']),
+      discount: _num(json['pricing']?['discount']),
+      items: (json['items'] is List)
+          ? (json['items'] as List)
+              .whereType<Map>()
+              .map((e) => OrderLineItem.fromJson(Map<String, dynamic>.from(e)))
+              .toList()
+          : const [],
+      placedAt: json['createdAt'] != null
+          ? DateTime.tryParse(json['createdAt'].toString())
+          : null,
+    );
+  }
+}
+
+double _num(dynamic v) => v is num ? v.toDouble() : double.tryParse('${v ?? ''}') ?? 0;
+
+/// Cash on delivery vs prepaid, as shown to the driver.
+extension OrderPaymentX on OrderId {
+  bool get isCashOnDelivery => paymentMethod.toLowerCase() == 'cod' || paymentMethod.toLowerCase() == 'cash';
+  bool get isPaid => paymentStatus == 'completed' || paymentStatus == 'paid';
+}
+
+class OrderLineItem {
+  final String name;
+  final String variant;
+  final int quantity;
+  final double price;
+  final double subtotal;
+
+  OrderLineItem({
+    required this.name,
+    this.variant = '',
+    required this.quantity,
+    required this.price,
+    required this.subtotal,
+  });
+
+  factory OrderLineItem.fromJson(Map<String, dynamic> json) {
+    final qty = (json['quantity'] is num) ? (json['quantity'] as num).toInt() : int.tryParse('${json['quantity']}') ?? 1;
+    final price = _num(json['price']);
+    final sv = json['selectedVariant'];
+    return OrderLineItem(
+      name: (json['productSnapshot']?['name'] ?? json['name'] ?? 'Item').toString(),
+      variant: sv is Map ? (sv['size'] ?? sv['sku'] ?? '').toString() : '',
+      quantity: qty,
+      price: price,
+      subtotal: json['subtotal'] != null ? _num(json['subtotal']) : price * qty,
     );
   }
 }

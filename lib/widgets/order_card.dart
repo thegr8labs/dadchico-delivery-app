@@ -5,6 +5,7 @@ import '../utils/app_style.dart';
 import '../controllers/home_controller.dart';
 import '../utils/map_utils.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'invoice_sheet.dart';
 
 class OrderCard extends StatelessWidget {
   final Map<String, dynamic> order;
@@ -83,14 +84,18 @@ class OrderCard extends StatelessWidget {
               child: Row(
                 children: [
                   _buildStatusTag(order['status']),
-                  const SizedBox(width: 12),
-                  Text(
-                    order['id'],
-                    style: AppStyle.subtitle.copyWith(
-                      color: AppColors.textSecondary,
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      order['id'] ?? '',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppStyle.subtitle.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
                     ),
                   ),
-                  const Spacer(),
+                  const SizedBox(width: 8),
                   ElevatedButton.icon(
                     onPressed: () {
                       if (order['next_step_lat'] != null &&
@@ -140,9 +145,17 @@ class OrderCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(order['next_step'], style: AppStyle.title),
+                        Expanded(
+                          child: Text(
+                            order['next_step'] ?? '',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppStyle.title,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
                         AnimatedRotation(
                           duration: const Duration(milliseconds: 200),
                           turns: isExpanded ? 0.5 : 0,
@@ -170,11 +183,17 @@ class OrderCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      "${(order['progress'] * 2).toInt()}/2 picked",
+                      "${order['picked_count'] ?? 0}/${order['total_stores'] ?? 0} picked",
                       style: AppStyle.caption.copyWith(
                         fontWeight: FontWeight.bold,
                         color: AppColors.textSecondary.withOpacity(0.8),
                       ),
+                    ),
+                    const SizedBox(height: 12),
+                    PaymentBadge(
+                      isCod: order['is_cod'] == true,
+                      isPaid: order['is_paid'] == true,
+                      total: order['total_price'] ?? 0,
                     ),
                   ],
                 ),
@@ -201,7 +220,19 @@ class OrderCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => showInvoiceSheet(context, order),
+                            child: _buildActionButton(
+                              "Invoice",
+                              Icons.receipt_long_outlined,
+                              const Color(0xFFF1F5F9),
+                              AppColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
                         Expanded(
                           child: GestureDetector(
                             onTap: () {
@@ -229,7 +260,7 @@ class OrderCard extends StatelessWidget {
                               );
                             },
                             child: _buildActionButton(
-                              "Full Route",
+                              "Route",
                               Icons.route_outlined,
                               const Color(0xFFF0FDF4),
                               AppColors.primaryGreen,
@@ -296,10 +327,14 @@ class OrderCard extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(icon, size: 18, color: color),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: AppStyle.title.copyWith(color: color, fontSize: 14),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppStyle.title.copyWith(color: color, fontSize: 13),
+            ),
           ),
         ],
       ),
@@ -353,12 +388,17 @@ class OrderCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      stop['name'],
-                      style: AppStyle.title.copyWith(fontSize: 15),
+                    Expanded(
+                      child: Text(
+                        stop['name'] ?? '',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppStyle.title.copyWith(fontSize: 15),
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     if (isPicked)
                       Text(
                         "₹${order['total_price'] ?? '0'}",
@@ -392,7 +432,9 @@ class OrderCard extends StatelessWidget {
                   ],
                 ),
                 Text(
-                  stop['address'],
+                  stop['address'] ?? '',
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
                   style: AppStyle.caption.copyWith(fontSize: 12),
                 ),
                 if (stop['items'] != null) ...[
@@ -431,10 +473,15 @@ class OrderCard extends StatelessWidget {
                   ),
                 ] else if (isCustomer) ...[
                   const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      Row(
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
                         children: [
                           GestureDetector(
                             onTap: () async {
@@ -452,7 +499,6 @@ class OrderCard extends StatelessWidget {
                               Icons.phone_outlined,
                             ),
                           ),
-                          const SizedBox(width: 8),
                           GestureDetector(
                             onTap: () {
                               if (stop['lat'] != null && stop['lng'] != null) {
