@@ -13,9 +13,11 @@ class AuthResponse {
 
   factory AuthResponse.fromJson(Map<String, dynamic> json) {
     return AuthResponse(
-      status: json['status'] ?? '',
-      message: json['message'] ?? '',
-      data: json['data'] != null ? AuthData.fromJson(json['data']) : null,
+      status: json['status']?.toString() ?? '',
+      message: json['message']?.toString() ?? '',
+      data: json['data'] is Map && json['data']['user'] is Map
+          ? AuthData.fromJson(Map<String, dynamic>.from(json['data']))
+          : null,
     );
   }
 }
@@ -31,8 +33,8 @@ class AuthData {
 
   factory AuthData.fromJson(Map<String, dynamic> json) {
     return AuthData(
-      user: UserModel.fromJson(json['user']),
-      tokens: Tokens.fromJson(json['tokens']),
+      user: UserModel.fromJson(Map<String, dynamic>.from(json['user'])),
+      tokens: Tokens.fromJson(json['tokens'] is Map ? Map<String, dynamic>.from(json['tokens']) : const {}),
     );
   }
 }
@@ -50,9 +52,9 @@ class Tokens {
 
   factory Tokens.fromJson(Map<String, dynamic> json) {
     return Tokens(
-      accessToken: json['accessToken'] ?? '',
-      refreshToken: json['refreshToken'] ?? '',
-      expiresAt: json['expiresAt'] ?? '',
+      accessToken: json['accessToken']?.toString() ?? '',
+      refreshToken: json['refreshToken']?.toString() ?? '',
+      expiresAt: json['expiresAt']?.toString() ?? '',
     );
   }
 

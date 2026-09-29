@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+
 import '../utils/app_style.dart';
 
+/// Compact metric tile. Flexes to fit narrow (360px) screens.
 class StatCard extends StatelessWidget {
   final String title;
   final String value;
@@ -18,21 +20,28 @@ class StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 125,
-      padding: const EdgeInsets.symmetric(vertical: 16),
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.withOpacity(0.1)),
-        // boxShadow: AppStyle.cardShadow,
+        border: Border.all(color: const Color(0xFFE8EDF2)),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: iconColor, size: 24),
-          const SizedBox(height: 8),
-          Text(value, style: AppStyle.title),
-          const SizedBox(height: 1),
-          Text(title, style: AppStyle.caption),
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(color: iconColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+            child: Icon(icon, color: iconColor, size: 18),
+          ),
+          const SizedBox(height: 10),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(value, style: AppStyle.heading2),
+          ),
+          const SizedBox(height: 2),
+          Text(title, style: AppStyle.caption, maxLines: 1, overflow: TextOverflow.ellipsis),
         ],
       ),
     );

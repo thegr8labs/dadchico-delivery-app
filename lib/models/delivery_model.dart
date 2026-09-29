@@ -1,4 +1,3 @@
-import 'dart:convert';
 
 class DeliveryResponse {
   final String status;
@@ -8,8 +7,8 @@ class DeliveryResponse {
 
   factory DeliveryResponse.fromJson(Map<String, dynamic> json) {
     return DeliveryResponse(
-      status: json['status'] ?? 'error',
-      data: json['data'] != null ? DeliveryData.fromJson(json['data']) : null,
+      status: json['status']?.toString() ?? 'error',
+      data: json['data'] is Map ? DeliveryData.fromJson(Map<String, dynamic>.from(json['data'])) : null,
     );
   }
 }
@@ -22,11 +21,18 @@ class DeliveryData {
 
   factory DeliveryData.fromJson(Map<String, dynamic> json) {
     return DeliveryData(
-      deliveries:
-          (json['deliveries'] as List?)
-              ?.map((i) => DeliveryModel.fromJson(i))
-              .toList() ??
-          [],
+      // Skip malformed entries instead of failing the whole list.
+      deliveries: ((json['deliveries'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((i) {
+            try {
+              return DeliveryModel.fromJson(Map<String, dynamic>.from(i));
+            } catch (_) {
+              return null;
+            }
+          })
+          .whereType<DeliveryModel>()
+          .toList(),
       pagination: json['pagination'] != null
           ? Pagination.fromJson(json['pagination'])
           : null,

@@ -19,13 +19,14 @@ class UserModel {
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
     return UserModel(
-      id: json['id'] ?? json['_id'] ?? '',
-      email: json['email'] ?? '',
-      username: json['username'] ?? '',
-      userType: json['userType'] ?? '',
-      status: json['status'] ?? '',
-      emailVerified: json['emailVerified'] ?? false,
-      profile: json['profile'] != null ? ProfileModel.fromJson(json['profile']) : null,
+      id: (json['id'] ?? json['_id'] ?? '').toString(),
+      email: json['email']?.toString() ?? '',
+      username: json['username']?.toString() ?? '',
+      userType: json['userType']?.toString() ?? '',
+      status: json['status']?.toString() ?? '',
+      emailVerified: json['emailVerified'] == true,
+      // `profile` can be missing or a bare id for drivers without a profile record.
+      profile: json['profile'] is Map ? ProfileModel.fromJson(Map<String, dynamic>.from(json['profile'])) : null,
     );
   }
 
@@ -71,17 +72,17 @@ class ProfileModel {
 
   factory ProfileModel.fromJson(Map<String, dynamic> json) {
     return ProfileModel(
-      id: json['_id'] ?? '',
-      fullName: json['fullName'] ?? '',
-      phone: json['phone'] ?? '',
-      address: json['address'] ?? '',
-      city: json['city'] ?? '',
-      vehicleType: json['vehicleType'] ?? '',
-      vehicleNumber: json['vehicleNumber'] ?? '',
-      licenseNumber: json['licenseNumber'] ?? '',
-      upiId: json['upiId'] ?? '',
-      isOnline: json['isOnline'] ?? false,
-      createdAt: json['createdAt'],
+      id: json['_id']?.toString() ?? '',
+      fullName: json['fullName']?.toString() ?? '',
+      phone: json['phone']?.toString() ?? '',
+      address: json['address']?.toString() ?? '',
+      city: json['city']?.toString() ?? '',
+      vehicleType: json['vehicleType']?.toString() ?? '',
+      vehicleNumber: json['vehicleNumber']?.toString() ?? '',
+      licenseNumber: json['licenseNumber']?.toString() ?? '',
+      upiId: json['upiId']?.toString() ?? '',
+      isOnline: json['isOnline'] == true,
+      createdAt: json['createdAt']?.toString(),
     );
   }
 

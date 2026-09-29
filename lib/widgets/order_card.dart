@@ -277,30 +277,28 @@ class OrderCard extends StatelessWidget {
                     const SizedBox(height: 10),
                     // Bottom Button (Only show Accept for Unassigned)
                     if (order['status'] == 'UNASSIGNED')
-                      SizedBox(
-                        width: double.infinity,
-                        height: 48,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            homeController.acceptOrder(order['delivery_id']);
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primaryGreen,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            elevation: 0,
-                          ),
-                          child: const Text(
-                            "Accept",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
+                      Obx(() {
+                        final busy = homeController.isBusy(order['delivery_id']);
+                        final online = homeController.isOnline.value;
+                        return SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: ElevatedButton.icon(
+                            onPressed: busy || !online ? null : () => homeController.acceptOrder(order['delivery_id']),
+                            icon: busy
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                  )
+                                : Icon(online ? Icons.check_circle_outline : Icons.wifi_off_rounded, color: Colors.white),
+                            label: Text(
+                              busy ? 'Accepting…' : (online ? 'Accept order' : 'Go online to accept'),
+                              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                             ),
                           ),
-                        ),
-                      ),
+                        );
+                      }),
                   ],
                 ),
               ),
@@ -407,28 +405,29 @@ class OrderCard extends StatelessWidget {
                         ),
                       )
                     else if (!isCustomer && order['status'] == 'ASSIGNED')
-                      SizedBox(
-                        height: 32,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            homeController.pickupVendor(
-                              order['delivery_id'],
-                              stop['vendor_id'],
-                            );
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primaryOrange,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                      Obx(() {
+                        final busy = homeController.isBusy('${order['delivery_id']}:${stop['vendor_id']}');
+                        return SizedBox(
+                          height: 34,
+                          child: ElevatedButton(
+                            onPressed: busy
+                                ? null
+                                : () => homeController.pickupVendor(order['delivery_id'], stop['vendor_id']),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primaryOrange,
+                              padding: const EdgeInsets.symmetric(horizontal: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             ),
-                            elevation: 0,
+                            child: busy
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                  )
+                                : const Text('Picked up', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
                           ),
-                          child: const Text(
-                            "Pick",
-                            style: TextStyle(color: Colors.white, fontSize: 12),
-                          ),
-                        ),
-                      ),
+                        );
+                      }),
                   ],
                 ),
                 Text(
@@ -518,29 +517,26 @@ class OrderCard extends StatelessWidget {
                         ],
                       ),
                       if (order['all_picked'] == true)
-                        SizedBox(
-                          height: 36,
-                          child: ElevatedButton(
-                            onPressed: () {
-                              homeController.deliverOrder(order['delivery_id']);
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primaryGreen,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              elevation: 0,
-                            ),
-                            child: const Text(
-                              "Deliver",
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
+                        Obx(() {
+                          final busy = homeController.isBusy(order['delivery_id']);
+                          return SizedBox(
+                            height: 40,
+                            child: ElevatedButton.icon(
+                              onPressed: busy ? null : () => _confirmDelivery(Get.context!, order),
+                              icon: busy
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                    )
+                                  : const Icon(Icons.done_all_rounded, size: 18, color: Colors.white),
+                              label: Text(
+                                busy ? 'Saving…' : 'Mark delivered',
+                                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
                               ),
                             ),
-                          ),
-                        ),
+                          );
+                        }),
                     ],
                   ),
                 ],
@@ -620,5 +616,34 @@ class OrderCard extends StatelessWidget {
       height: 1.5,
       color: color,
     );
+  }
+}
+
+
+/// Ask before marking delivered; for cash orders remind the partner to collect the amount.
+Future<void> _confirmDelivery(BuildContext context, Map<String, dynamic> order) async {
+  final bool isCod = order['is_cod'] == true;
+  final amount = order['total_price'];
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: const Text('Mark as delivered?'),
+      content: Text(
+        isCod
+            ? 'This is a Cash on Delivery order. Collect ₹${amount ?? 0} from ${order['customer'] ?? 'the customer'} before confirming.'
+            : 'Confirm that order #${order['id']} was handed to ${order['customer'] ?? 'the customer'}.',
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Not yet')),
+        ElevatedButton(
+          onPressed: () => Navigator.of(ctx).pop(true),
+          child: Text(isCod ? 'Cash collected' : 'Delivered'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed == true) {
+    Get.find<HomeController>().deliverOrder(order['delivery_id']);
   }
 }

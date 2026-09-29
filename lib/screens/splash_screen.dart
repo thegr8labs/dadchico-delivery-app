@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:get/get.dart';
+
+import '../services/storage_service.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_style.dart';
-import '../services/storage_service.dart';
+import '../widgets/brand_lockup.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -21,55 +23,35 @@ class _SplashScreenState extends State<SplashScreen> {
     _navigateToNext();
   }
 
-  _navigateToNext() async {
-    await Future.delayed(const Duration(seconds: 3));
-    if (_storageService.isLoggedIn()) {
-      Get.offNamed('/home');
-    } else {
-      Get.offNamed('/login');
-    }
+  Future<void> _navigateToNext() async {
+    await Future.delayed(const Duration(milliseconds: 1200));
+    if (!mounted) return;
+    Get.offNamed(_storageService.isLoggedIn() ? '/home' : '/login');
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.primaryGreen,
-      body: Center(
+      backgroundColor: Colors.white,
+      body: SafeArea(
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 20,
-                    spreadRadius: 5,
-                  )
-                ],
-              ),
-              child: Image.asset(
-                'assets/brand/logo_mark.png',
-                width: 88,
-                height: 88,
-              ),
-            ).animate().scale(duration: 600.ms, curve: Curves.easeOutBack).fadeIn(),
-            const SizedBox(height: 24),
-            Image.asset('assets/brand/logo_white.png', height: 40)
+            const Spacer(),
+            const BrandLockup(logoHeight: 52)
                 .animate()
-                .fadeIn(delay: 400.ms)
-                .moveY(begin: 20, end: 0),
-            const SizedBox(height: 10),
-            Text(
-              "Delivery Partner",
-              style: AppStyle.subtitle.copyWith(
-                color: Colors.white.withOpacity(0.9),
-                letterSpacing: 1.5,
-              ),
-            ).animate().fadeIn(delay: 600.ms),
+                .fadeIn(duration: 450.ms)
+                .scale(begin: const Offset(0.92, 0.92), curve: Curves.easeOutBack, duration: 550.ms),
+            const SizedBox(height: 28),
+            const SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(strokeWidth: 2.4, color: AppColors.primaryGreen),
+            ).animate().fadeIn(delay: 500.ms),
+            const Spacer(),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 20),
+              child: Text('Fresh groceries, delivered by you', style: AppStyle.caption),
+            ).animate().fadeIn(delay: 300.ms),
           ],
         ),
       ),

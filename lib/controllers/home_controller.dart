@@ -1,27 +1,60 @@
-import 'package:flutter/material.dart';
-import 'package:get/get.dart';
-import '../services/driver_service.dart';
-import '../models/profile_summary.dart';
-import '../models/delivery_model.dart';
-import '../utils/app_colors.dart';
+import 'dart:async';
 
-class HomeController extends GetxController {
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:get/get.dart';
+
+import '../models/delivery_model.dart';
+import '../models/profile_summary.dart';
+import '../services/api_service.dart';
+import '../services/driver_service.dart';
+import '../services/notification_service.dart';
+import '../utils/app_colors.dart';
+import 'auth_controller.dart';
+
+class HomeController extends GetxController with WidgetsBindingObserver {
   final DriverService _driverService = DriverService();
 
+  static const Duration _pollInterval = Duration(seconds: 30);
+  Timer? _pollTimer;
+
   var isOnline = true.obs;
-  var isLoading = false.obs;
+
+  /// True only until the first order load finishes (shows skeletons).
+  var ordersLoading = true.obs;
+
+  /// Background refresh in progress (pull-to-refresh / polling) — keeps current data visible.
+  var refreshing = false.obs;
+  var ordersError = ''.obs;
+  var summaryLoading = false.obs;
+
+  /// Deliveries with an action (accept / pickup / deliver) in flight.
+  var busyIds = <String>{}.obs;
+
+  /// Home tab: 0 = New, 1 = Active, 2 = Done
+  var ordersTab = 0.obs;
   var selectedTab = 0.obs;
   var expandedOrderIds = <String>[].obs;
   var unassignedDeliveries = <Map<String, dynamic>>[].obs;
   var activeDeliveries = <Map<String, dynamic>>[].obs;
   var doneDeliveries = <Map<String, dynamic>>[].obs;
-  
+  var lastUpdated = Rxn<DateTime>();
+
+  final Set<String> _seenPoolIds = {};
+  bool _poolPrimed = false;
+
+  /// Legacy flag some screens still read — true while anything is loading.
+  RxBool get isLoading => (ordersLoading.value || summaryLoading.value).obs;
+
+  bool isBusy(String deliveryId) => busyIds.contains(deliveryId);
+
   List<Map<String, dynamic>> get todaysTrips {
     final now = DateTime.now();
     return doneDeliveries.where((trip) {
       final date = trip['date'] as DateTime?;
       if (date == null) return false;
-      return date.year == now.year && date.month == now.month && date.day == now.day;
+      final local = date.toLocal();
+      return local.year == now.year && local.month == now.month && local.day == now.day;
     }).toList();
   }
 
@@ -38,77 +71,134 @@ class HomeController extends GetxController {
   @override
   void onInit() {
     super.onInit();
+    WidgetsBinding.instance.addObserver(this);
+    if (Get.isRegistered<NotificationService>()) {
+      final notifications = Get.find<NotificationService>();
+      notifications.onOrdersChanged = () => fetchOrders(silent: true);
+      notifications.registerDevice();
+    }
     refreshAllData();
+    _startPolling();
   }
 
-  Future<void> fetchOrders() async {
-    isLoading.value = true;
+  @override
+  void onClose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _pollTimer?.cancel();
+    if (Get.isRegistered<NotificationService>()) {
+      Get.find<NotificationService>().onOrdersChanged = null;
+    }
+    super.onClose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      fetchOrders(silent: true);
+      _startPolling();
+    } else if (state == AppLifecycleState.paused) {
+      _pollTimer?.cancel();
+    }
+  }
+
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(_pollInterval, (_) {
+      if (isOnline.value) fetchOrders(silent: true);
+    });
+  }
+
+  /// Sign out when the session is no longer valid.
+  bool _handleAuthError(Object e) {
+    if (e is ApiException && e.isUnauthorized) {
+      _pollTimer?.cancel();
+      _toast('Session expired', 'Please log in again.', error: true);
+      Get.find<AuthController>().logout();
+      return true;
+    }
+    return false;
+  }
+
+  void _toast(String title, String message, {bool error = false}) {
+    if (Get.isSnackbarOpen) Get.closeCurrentSnackbar();
+    Get.snackbar(
+      title,
+      message,
+      backgroundColor: error ? AppColors.error : AppColors.primaryGreen,
+      colorText: Colors.white,
+      snackPosition: SnackPosition.BOTTOM,
+      margin: const EdgeInsets.all(16),
+      borderRadius: 14,
+      duration: const Duration(seconds: 3),
+      icon: Icon(error ? Icons.error_outline : Icons.check_circle_outline, color: Colors.white),
+    );
+  }
+
+  String _messageOf(Object e) => e is ApiException ? e.message : 'Something went wrong. Please try again.';
+
+  Future<void> fetchOrders({bool silent = false}) async {
+    if (refreshing.value) return;
+    refreshing.value = true;
+    if (!silent && unassignedDeliveries.isEmpty && activeDeliveries.isEmpty && doneDeliveries.isEmpty) {
+      ordersLoading.value = true;
+    }
     try {
-      // Fetch unassigned, assigned, my-orders and delivered in parallel
+      // New requests come from the driver pool (only stores mapped to this driver);
+      // active/done come ONLY from deliveries assigned to this driver.
       final results = await Future.wait([
-        _driverService.getDeliveriesByStatus('UNASSIGNED'),
-        _driverService.getDeliveriesByStatus('ASSIGNED'),
-        _driverService.getMyOrders(),
-        _driverService.getDeliveriesByStatus('DELIVERED'),
+        _driverService.getAvailableDeliveries(),
+        _driverService.getMyOrders(limit: 50),
       ]);
 
-      final unassignedResponse = DeliveryResponse.fromJson(results[0]);
-      final assignedResponse = DeliveryResponse.fromJson(results[1]);
-      final myOrdersResponse = DeliveryResponse.fromJson(results[2]);
-      final doneResponse = DeliveryResponse.fromJson(results[3]);
+      final pool = DeliveryResponse.fromJson(results[0]).data?.deliveries ?? const <DeliveryModel>[];
+      final mine = DeliveryResponse.fromJson(results[1]).data?.deliveries ?? const <DeliveryModel>[];
 
-      if (unassignedResponse.status == 'success' &&
-          unassignedResponse.data != null) {
-        unassignedDeliveries.value = unassignedResponse.data!.deliveries
-            .map((d) => _mapDeliveryToUiFormat(d))
-            .toList();
-      }
+      final poolMapped = pool.where((d) => d.status == 'UNASSIGNED').map(_mapDeliveryToUiFormat).toList();
+      _announceNewRequests(poolMapped);
+      unassignedDeliveries.value = poolMapped;
 
-      // 1. Collect all deliveries from all sources
-      List<DeliveryModel> allDeliveries = [];
-      if (assignedResponse.data != null)
-        allDeliveries.addAll(assignedResponse.data!.deliveries);
-      if (myOrdersResponse.data != null)
-        allDeliveries.addAll(myOrdersResponse.data!.deliveries);
-      if (doneResponse.data != null)
-        allDeliveries.addAll(doneResponse.data!.deliveries);
+      final mineMapped = mine.map(_mapDeliveryToUiFormat).toList();
+      const activeStatuses = {'ASSIGNED', 'PICKED_UP', 'IN_TRANSIT'};
+      activeDeliveries.value = mineMapped.where((o) => activeStatuses.contains(o['status'])).toList();
+      doneDeliveries.value = mineMapped.where((o) => o['status'] == 'DELIVERED').toList();
 
-      // 2. Deduplicate and map to UI format
-      Map<String, Map<String, dynamic>> dedupedMap = {};
-
-      for (var d in allDeliveries) {
-        final mapped = _mapDeliveryToUiFormat(d);
-        final String id = mapped['delivery_id'];
-
-        // If we haven't seen this order, or if this version has better data (a real name)
-        if (!dedupedMap.containsKey(id) ||
-            (dedupedMap[id]!['customer'] == 'Customer' &&
-                mapped['customer'] != 'Customer')) {
-          dedupedMap[id] = mapped;
-        }
-      }
-
-      final List<Map<String, dynamic>> allMapped = dedupedMap.values.toList();
-
-      // 3. Filter into Active vs Done
-      activeDeliveries.value = allMapped
-          .where((order) => order['status'] != 'DELIVERED')
-          .toList();
-
-      doneDeliveries.value = allMapped
-          .where((order) => order['status'] == 'DELIVERED')
-          .toList();
+      ordersError.value = '';
+      lastUpdated.value = DateTime.now();
     } catch (e) {
-      print("Error fetching deliveries: $e");
-      Get.snackbar(
-        "Fetch Error",
-        "Failed to load orders: $e",
-        backgroundColor: AppColors.error,
-        colorText: Colors.white,
-      );
+      if (_handleAuthError(e)) return;
+      debugPrint('Error fetching deliveries: $e');
+      ordersError.value = _messageOf(e);
+      if (!silent) _toast("Couldn't load orders", _messageOf(e), error: true);
     } finally {
-      isLoading.value = false;
+      ordersLoading.value = false;
+      refreshing.value = false;
     }
+  }
+
+  /// Alert the driver (sound + heads-up) when new requests show up after the first load.
+  void _announceNewRequests(List<Map<String, dynamic>> pool) {
+    final ids = pool.map((o) => o['delivery_id'] as String).toSet();
+    if (!_poolPrimed) {
+      _seenPoolIds.addAll(ids);
+      _poolPrimed = true;
+      return;
+    }
+    final fresh = pool.where((o) => !_seenPoolIds.contains(o['delivery_id'])).toList();
+    _seenPoolIds
+      ..clear()
+      ..addAll(ids);
+    if (fresh.isEmpty || !isOnline.value) return;
+
+    HapticFeedback.heavyImpact();
+    final first = fresh.first;
+    final title = fresh.length == 1 ? 'New delivery request' : '${fresh.length} new delivery requests';
+    final body = fresh.length == 1
+        ? 'Order #${first['id']} · ${first['total_stores']} store${first['total_stores'] == 1 ? '' : 's'} · earn ₹${first['earnings']}'
+        : 'Open the app to accept before someone else does.';
+    if (Get.isRegistered<NotificationService>()) {
+      Get.find<NotificationService>().show(title, body);
+    }
+    ordersTab.value = 0;
   }
 
   Map<String, dynamic> _mapDeliveryToUiFormat(DeliveryModel delivery) {
@@ -192,11 +282,9 @@ class HomeController extends GetxController {
   }
 
   Future<void> fetchProfileSummary({String? period}) async {
-    isLoading.value = true;
+    summaryLoading.value = true;
     try {
-      final responseMap = await _driverService.getProfileSummary(
-        period: period,
-      );
+      final responseMap = await _driverService.getProfileSummary(period: period);
       final response = ProfileSummaryResponse.fromJson(responseMap);
 
       if (response.status == 'success' && response.data != null) {
@@ -221,9 +309,10 @@ class HomeController extends GetxController {
         };
       }
     } catch (e) {
-      print("Error fetching profile summary: $e");
+      if (_handleAuthError(e)) return;
+      debugPrint('Error fetching profile summary: $e');
     } finally {
-      isLoading.value = false;
+      summaryLoading.value = false;
     }
   }
 
@@ -235,139 +324,90 @@ class HomeController extends GetxController {
   Future<void> fetchRateSettings() async {
     try {
       final response = await _driverService.getRateSettings();
-      if (response['status'] == 'success' && response['data'] != null) {
-        final settings = response['data']['rateSettings'] as List;
+      final data = response['data'];
+      if (response['status'] == 'success' && data is Map && data['rateSettings'] is List) {
+        final settings = data['rateSettings'] as List;
         if (settings.isNotEmpty) {
-          // Use the active one or the first one
-          final active = settings.firstWhere(
-            (s) => s['isActive'] == true,
-            orElse: () => settings[0],
-          );
-          rateSettings.value = active;
+          final active = settings.firstWhere((s) => s is Map && s['isActive'] == true, orElse: () => settings[0]);
+          if (active is Map) rateSettings.value = Map<String, dynamic>.from(active);
         }
       }
     } catch (e) {
-      print("Error fetching rate settings: $e");
+      debugPrint('Rate settings unavailable: $e');
     }
   }
+
+  var togglingOnline = false.obs;
 
   Future<void> toggleOnline(bool value) async {
-    // We don't update isOnline.value immediately to ensure sync with server
+    if (togglingOnline.value) return;
+    togglingOnline.value = true;
     try {
       final responseMap = await _driverService.toggleShiftStatus(value);
-      if (responseMap['status'] == 'success' && responseMap['data'] != null) {
-        isOnline.value = responseMap['data']['isOnline'] ?? value;
-        Get.snackbar(
-          "Status Updated",
-          "You are now ${isOnline.value ? 'Online' : 'Offline'}",
-          backgroundColor: isOnline.value
-              ? AppColors.primaryGreen
-              : Colors.grey,
-          colorText: Colors.white,
-          snackPosition: SnackPosition.BOTTOM,
-          duration: const Duration(seconds: 2),
-        );
-      }
-    } catch (e) {
-      Get.snackbar(
-        "Error",
-        "Failed to update status. Please try again.",
-        backgroundColor: AppColors.error,
-        colorText: Colors.white,
+      final data = responseMap['data'];
+      isOnline.value = data is Map && data['isOnline'] is bool ? data['isOnline'] as bool : value;
+      _toast(
+        isOnline.value ? "You're online" : "You're offline",
+        isOnline.value ? "We'll alert you when new orders come in." : "You won't get new order alerts.",
       );
-      print("Toggle Error: $e");
+      if (isOnline.value) fetchOrders(silent: true);
+    } catch (e) {
+      if (_handleAuthError(e)) return;
+      _toast("Couldn't change status", _messageOf(e), error: true);
+    } finally {
+      togglingOnline.value = false;
     }
   }
 
-  Future<void> acceptOrder(String deliveryId) async {
-    isLoading.value = true;
+  Future<void> _runAction(String deliveryId, Future<Map<String, dynamic>> Function() action, String successTitle,
+      String successMessage, {int? goToTab}) async {
+    if (busyIds.contains(deliveryId)) return;
+    busyIds.add(deliveryId);
     try {
-      final response = await _driverService.acceptDelivery(deliveryId);
-      if (response['status'] == 'success') {
-        Get.snackbar(
-          "Success",
-          "Order accepted successfully",
-          backgroundColor: AppColors.primaryGreen,
-          colorText: Colors.white,
-        );
-        // Refresh lists to move order from Unassigned to Assigned
-        await refreshAllData();
-      }
+      await action();
+      HapticFeedback.mediumImpact();
+      _toast(successTitle, successMessage);
+      if (goToTab != null) ordersTab.value = goToTab;
+      await Future.wait([fetchOrders(silent: true), fetchProfileSummary(period: selectedPeriod.value)]);
     } catch (e) {
-      Get.snackbar(
-        "Error",
-        "Failed to accept order: $e",
-        backgroundColor: AppColors.error,
-        colorText: Colors.white,
-      );
+      if (_handleAuthError(e)) return;
+      _toast('Action failed', _messageOf(e), error: true);
+      // The order may have changed (e.g. someone else accepted it) — resync.
+      fetchOrders(silent: true);
     } finally {
-      isLoading.value = false;
+      busyIds.remove(deliveryId);
     }
   }
+
+  Future<void> acceptOrder(String deliveryId) => _runAction(
+        deliveryId,
+        () => _driverService.acceptDelivery(deliveryId),
+        'Order accepted',
+        'Head to the first store for pickup.',
+        goToTab: 1,
+      );
+
+  Future<void> pickupVendor(String deliveryId, String vendorId) => _runAction(
+        '$deliveryId:$vendorId',
+        () => _driverService.updateVendorPickup(deliveryId, vendorId),
+        'Pickup done',
+        'Marked as picked up.',
+      );
+
+  Future<void> deliverOrder(String deliveryId) => _runAction(
+        deliveryId,
+        () => _driverService.updateDeliveryStatus(deliveryId, 'DELIVERED'),
+        'Delivered',
+        'Great job! The order is marked as delivered.',
+        goToTab: 2,
+      );
 
   Future<void> refreshAllData() async {
-    // Refresh all lists and stats in parallel
     await Future.wait([
       fetchProfileSummary(period: selectedPeriod.value),
       fetchOrders(),
       fetchRateSettings(),
     ]);
-  }
-
-  Future<void> pickupVendor(String deliveryId, String vendorId) async {
-    isLoading.value = true;
-    try {
-      final response = await _driverService.updateVendorPickup(
-        deliveryId,
-        vendorId,
-      );
-      if (response['status'] == 'success') {
-        Get.snackbar(
-          "Success",
-          "Pickup completed",
-          backgroundColor: AppColors.primaryGreen,
-          colorText: Colors.white,
-        );
-        await refreshAllData();
-      }
-    } catch (e) {
-      Get.snackbar(
-        "Error",
-        "Failed to complete pickup: $e",
-        backgroundColor: AppColors.error,
-        colorText: Colors.white,
-      );
-    } finally {
-      isLoading.value = false;
-    }
-  }
-
-  Future<void> deliverOrder(String deliveryId) async {
-    isLoading.value = true;
-    try {
-      final response = await _driverService.updateDeliveryStatus(
-        deliveryId,
-        'DELIVERED',
-      );
-      if (response['status'] == 'success') {
-        Get.snackbar(
-          "Success",
-          "Delivery completed",
-          backgroundColor: AppColors.primaryGreen,
-          colorText: Colors.white,
-        );
-        await refreshAllData();
-      }
-    } catch (e) {
-      Get.snackbar(
-        "Error",
-        "Failed to complete delivery: $e",
-        backgroundColor: AppColors.error,
-        colorText: Colors.white,
-      );
-    } finally {
-      isLoading.value = false;
-    }
   }
 
   void changeTab(int index) {

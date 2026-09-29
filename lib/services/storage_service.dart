@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 import '../models/user_model.dart';
@@ -32,8 +31,12 @@ class StorageService extends GetxService {
 
   UserModel? getUser() {
     final userData = _storage.read(_userKey);
-    if (userData != null) {
-      return UserModel.fromJson(userData);
+    if (userData is Map) {
+      try {
+        return UserModel.fromJson(Map<String, dynamic>.from(userData));
+      } catch (_) {
+        return null;
+      }
     }
     return null;
   }
@@ -45,6 +48,7 @@ class StorageService extends GetxService {
   }
 
   bool isLoggedIn() {
-    return getAccessToken() != null;
+    final token = getAccessToken();
+    return token != null && token.isNotEmpty;
   }
 }

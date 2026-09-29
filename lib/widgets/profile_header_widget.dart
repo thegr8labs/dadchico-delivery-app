@@ -1,82 +1,76 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+
+import '../models/user_model.dart';
+import '../services/storage_service.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_style.dart';
-import '../controllers/home_controller.dart';
-import '../services/storage_service.dart';
-import '../models/user_model.dart';
 
+/// Greeting row: initials avatar, name and vehicle.
 class ProfileHeaderWidget extends StatelessWidget {
   const ProfileHeaderWidget({super.key});
 
+  static String _greeting() {
+    final h = DateTime.now().hour;
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final HomeController controller = Get.find<HomeController>();
-    final StorageService storageService = Get.find<StorageService>();
-    final UserModel? user = storageService.getUser();
-
-    String initials = "U";
-    if (user?.profile?.fullName != null && user!.profile!.fullName.isNotEmpty) {
-      List<String> names = user.profile!.fullName.trim().split(" ");
-      if (names.length >= 2) {
-        initials = (names[0][0] + names[1][0]).toUpperCase();
-      } else if (names.isNotEmpty && names[0].isNotEmpty) {
-        initials = names[0][0].toUpperCase();
-      }
-    }
+    final UserModel? user = Get.find<StorageService>().getUser();
+    final name = (user?.profile?.fullName ?? '').trim();
+    final parts = name.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    final initials = parts.isEmpty
+        ? 'D'
+        : (parts.length > 1 ? parts[0][0] + parts[1][0] : parts[0][0]).toUpperCase();
+    final vehicle = user?.profile?.vehicleType ?? '';
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
       child: Row(
         children: [
           CircleAvatar(
-            radius: 28,
-            backgroundColor: const Color(0xFFFDE7D1),
+            radius: 24,
+            backgroundColor: AppColors.primaryTint,
             child: Text(
               initials,
-              style: TextStyle(
-                color: Colors.orange.shade800,
-                fontWeight: FontWeight.bold,
-                fontSize: 20,
-              ),
+              style: const TextStyle(color: AppColors.primaryGreen, fontWeight: FontWeight.w700, fontSize: 17),
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Text(_greeting(), style: AppStyle.caption),
                 Text(
-                  user?.profile?.fullName ?? "Driver Name",
+                  name.isNotEmpty ? name : 'Delivery partner',
                   style: AppStyle.heading2,
-                ),
-                Row(
-                  children: [
-                    const Icon(Icons.star, color: Colors.amber, size: 16),
-                    const SizedBox(width: 4),
-                    Text("4.6", style: AppStyle.subtitle),
-                    const SizedBox(width: 8),
-                    const Text("|", style: TextStyle(color: Colors.grey)),
-                    const SizedBox(width: 8),
-                    const Icon(Icons.pedal_bike, color: Colors.grey, size: 16),
-                    const SizedBox(width: 4),
-                    Text(
-                      user?.profile?.vehicleType ?? "Vehicle",
-                      style: AppStyle.subtitle,
-                    ),
-                  ],
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
-          Obx(
-            () => CupertinoSwitch(
-              value: controller.isOnline.value,
-              onChanged: (val) => controller.toggleOnline(val),
-              activeColor: AppColors.primaryGreen,
+          if (vehicle.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFFE8EDF2)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.two_wheeler_rounded, size: 16, color: AppColors.textSecondary),
+                  const SizedBox(width: 6),
+                  Text(vehicle[0].toUpperCase() + vehicle.substring(1), style: AppStyle.caption),
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );

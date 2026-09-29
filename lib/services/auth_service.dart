@@ -1,18 +1,21 @@
-import 'dart:convert';
 import 'api_service.dart';
 
 class AuthService extends ApiService {
+  /// Returns the decoded login response, or throws an [ApiException] with a readable message.
   Future<Map<String, dynamic>> login(String email, String password) async {
-    try {
-      final response = await post('/auth/login', {
-        'identifier': email,
-        'password': password,
-      });
+    final response = await post('/auth/login', {
+      'identifier': email.trim(),
+      'password': password,
+    });
+    return ApiService.decode(response, fallback: 'Login failed. Check your email and password.');
+  }
 
-      final decoded = jsonDecode(response.body);
-      return decoded;
-    } catch (e) {
-      throw Exception('Failed to login: $e');
+  /// Best-effort server logout (clears server cookies / refresh token).
+  Future<void> logout() async {
+    try {
+      await post('/auth/logout', {}, extraHeaders: ApiService.authHeaders());
+    } catch (_) {
+      // Ignore — local sign-out always succeeds.
     }
   }
 }

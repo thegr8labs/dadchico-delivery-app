@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
-  // Primary Theme Colors
-  static const Color primaryGreen = Color(0xFF22C55E);
+  // Primary Theme Colors — Dadchico brand green
+  static const Color primaryGreen = Color(0xFF147359);
+  static const Color primaryGreenDark = Color(0xFF0E5642);
+  static const Color primaryTint = Color(0xFFE8F3EF);
+  static const Color navy = Color(0xFF102134);
   static const Color primaryBlue = Color(0xFF2563EB);
   static const Color primaryOrange = Color(0xFFF97316);
   static const Color primaryYellow = Color(0xFFFBBF24);
@@ -13,12 +16,12 @@ class AppColors {
   static const Color scaffoldBg = Color(0xFFF1F5F9);
 
   // Text Colors
-  static const Color textPrimary = Color(0xFF1E293B);
+  static const Color textPrimary = Color(0xFF102134);
   static const Color textSecondary = Color(0xFF64748B);
   static const Color textLight = Color(0xFF94A3B8);
 
   // Status Colors
-  static const Color success = Color(0xFF22C55E);
+  static const Color success = Color(0xFF16A34A);
   static const Color info = Color(0xFF3B82F6);
   static const Color warning = Color(0xFFF59E0B);
   static const Color error = Color(0xFFEF4444);

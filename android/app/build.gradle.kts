@@ -13,6 +13,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // Required by flutter_local_notifications
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -41,4 +43,15 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+}
+
+// Push notifications need android/app/google-services.json from the Firebase console
+// (same Firebase project as the backend's service account). Without it the app still
+// builds and shows in-app order alerts, but background pushes are disabled.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
 }

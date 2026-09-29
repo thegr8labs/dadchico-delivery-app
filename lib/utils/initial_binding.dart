@@ -7,7 +7,7 @@ class InitialBinding extends Bindings {
   @override
   void dependencies() {
     Get.put(StorageService(), permanent: true);
-    Get.lazyPut(() => AuthController());
-    Get.lazyPut(() => HomeController());
+    Get.lazyPut(() => AuthController(), fenix: true);
+    Get.lazyPut(() => HomeController(), fenix: true);
   }
 }
