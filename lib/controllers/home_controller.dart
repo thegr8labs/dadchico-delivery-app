@@ -136,8 +136,15 @@ class HomeController extends GetxController with WidgetsBindingObserver {
 
   String _messageOf(Object e) => e is ApiException ? e.message : 'Something went wrong. Please try again.';
 
+  /// Set when a fetch is requested while one is already running. The running fetch may
+  /// have started before an action (e.g. a pickup) and return stale data, so re-run after it.
+  bool _refetchQueued = false;
+
   Future<void> fetchOrders({bool silent = false}) async {
-    if (refreshing.value) return;
+    if (refreshing.value) {
+      _refetchQueued = true;
+      return;
+    }
     refreshing.value = true;
     if (!silent && unassignedDeliveries.isEmpty && activeDeliveries.isEmpty && doneDeliveries.isEmpty) {
       ordersLoading.value = true;
@@ -172,6 +179,10 @@ class HomeController extends GetxController with WidgetsBindingObserver {
     } finally {
       ordersLoading.value = false;
       refreshing.value = false;
+      if (_refetchQueued) {
+        _refetchQueued = false;
+        fetchOrders(silent: true);
+      }
     }
   }
 
