@@ -118,6 +118,7 @@ class OrderId {
   final String orderNumber;
   final String paymentStatus;
   final String paymentMethod;
+  final String razorpayOrderId;
   final String deliveryType;
   final double subtotal;
   final double shipping;
@@ -133,6 +134,7 @@ class OrderId {
     required this.orderNumber,
     required this.paymentStatus,
     this.paymentMethod = '',
+    this.razorpayOrderId = '',
     this.deliveryType = 'delivery',
     this.subtotal = 0,
     this.shipping = 0,
@@ -184,6 +186,7 @@ class OrderId {
       totalPrice: (json['pricing']?['total'] ?? json['total'] ?? 0).toDouble(),
       paymentStatus: json['payment']?['status'] ?? '',
       paymentMethod: (json['payment']?['method'] ?? '').toString(),
+      razorpayOrderId: (json['payment']?['razorpayOrderId'] ?? '').toString(),
       deliveryType: (json['deliveryType'] ?? 'delivery').toString(),
       subtotal: _num(json['pricing']?['subtotal']),
       shipping: _num(json['pricing']?['shipping']),
@@ -205,7 +208,12 @@ double _num(dynamic v) => v is num ? v.toDouble() : double.tryParse('${v ?? ''}'
 
 /// Cash on delivery vs prepaid, as shown to the driver.
 extension OrderPaymentX on OrderId {
-  bool get isCashOnDelivery => paymentMethod.toLowerCase() == 'cod' || paymentMethod.toLowerCase() == 'cash';
+  bool get isCashOnDelivery {
+    final m = paymentMethod.toLowerCase();
+    if (m.isNotEmpty) return m == 'cod' || m == 'cash' || m == 'cash_on_delivery';
+    // Older COD orders were saved without a method; online orders always have a Razorpay order.
+    return razorpayOrderId.isEmpty;
+  }
   bool get isPaid => paymentStatus == 'completed' || paymentStatus == 'paid';
 }
 

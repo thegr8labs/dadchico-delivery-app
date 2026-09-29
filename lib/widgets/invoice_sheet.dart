@@ -5,7 +5,7 @@ import '../utils/app_style.dart';
 
 String _inr(num v) => '₹${v.toStringAsFixed(v % 1 == 0 ? 0 : 2)}';
 
-/// Payment type pill: "Cash on delivery · Collect ₹X" or "Paid online".
+/// Payment type pill: "Cash on delivery · Collect ₹X", "Cash on delivery · Collected ₹X" or "Paid online".
 class PaymentBadge extends StatelessWidget {
   final bool isCod;
   final bool isPaid;
@@ -27,7 +27,9 @@ class PaymentBadge extends StatelessWidget {
           const SizedBox(width: 6),
           Flexible(
             child: Text(
-              collect ? 'Cash on delivery · Collect ${_inr(total)}' : 'Paid online · ${_inr(total)}',
+              isCod
+                  ? 'Cash on delivery · ${isPaid ? 'Collected' : 'Collect'} ${_inr(total)}'
+                  : 'Paid online · ${_inr(total)}',
               overflow: TextOverflow.ellipsis,
               style: TextStyle(color: fg, fontWeight: FontWeight.bold, fontSize: 12.5),
             ),
@@ -132,7 +134,7 @@ Future<void> showInvoiceSheet(BuildContext context, Map<String, dynamic> order) 
             if (discount > 0) _row('Discount', '− ${_inr(discount)}'),
             _row('Delivery fee', shipping > 0 ? _inr(shipping) : 'Free'),
             const SizedBox(height: 6),
-            _row(isCod && !isPaid ? 'To collect' : 'Total paid', _inr(total), bold: true),
+            _row(isCod && !isPaid ? 'To collect' : isCod ? 'Total collected' : 'Total paid', _inr(total), bold: true),
             const SizedBox(height: 20),
             SizedBox(
               height: 48,
