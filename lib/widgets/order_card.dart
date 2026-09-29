@@ -178,7 +178,11 @@ class OrderCard extends StatelessWidget {
                               : Colors.grey.shade300,
                         ),
                         _buildLine(Colors.grey.shade200),
-                        _buildDot(Colors.grey.shade200),
+                        _buildDot(
+                          order['all_picked'] == true
+                              ? AppColors.primaryGreen
+                              : Colors.grey.shade200,
+                        ),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -199,6 +203,36 @@ class OrderCard extends StatelessWidget {
                 ),
               ),
             ),
+            // Next step once every store is picked — visible without expanding the card
+            if (order['all_picked'] == true && _canDeliver(order['status']))
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: Obx(() {
+                  final busy = homeController.isBusy(order['delivery_id']);
+                  return SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton.icon(
+                      onPressed: busy ? null : () => _confirmDelivery(context, order),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primaryGreen,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: busy
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            )
+                          : const Icon(Icons.done_all_rounded, color: Colors.white),
+                      label: Text(
+                        busy ? 'Saving…' : 'Mark delivered',
+                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  );
+                }),
+              ),
             // Expanded Section
             if (isExpanded) ...[
               const Divider(height: 1),
@@ -516,27 +550,6 @@ class OrderCard extends StatelessWidget {
                           ),
                         ],
                       ),
-                      if (order['all_picked'] == true)
-                        Obx(() {
-                          final busy = homeController.isBusy(order['delivery_id']);
-                          return SizedBox(
-                            height: 40,
-                            child: ElevatedButton.icon(
-                              onPressed: busy ? null : () => _confirmDelivery(Get.context!, order),
-                              icon: busy
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                                    )
-                                  : const Icon(Icons.done_all_rounded, size: 18, color: Colors.white),
-                              label: Text(
-                                busy ? 'Saving…' : 'Mark delivered',
-                                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          );
-                        }),
                     ],
                   ),
                 ],
@@ -574,15 +587,28 @@ class OrderCard extends StatelessWidget {
     );
   }
 
+  static bool _canDeliver(String? status) => status == 'PICKED_UP' || status == 'IN_TRANSIT';
+
   Widget _buildStatusTag(String status) {
     Color bg = AppColors.pickingUpBg;
     Color text = AppColors.pickingUpText;
-    if (status == 'Assigned') {
-      bg = AppColors.assignedBg;
-      text = AppColors.assignedText;
-    } else if (status == 'New Order') {
-      bg = AppColors.primaryBlue.withOpacity(0.1);
-      text = AppColors.primaryBlue;
+    String label = status;
+    switch (status) {
+      case 'UNASSIGNED':
+        label = 'New Order';
+        bg = AppColors.primaryBlue.withOpacity(0.1);
+        text = AppColors.primaryBlue;
+      case 'ASSIGNED':
+        label = 'Picking up';
+      case 'PICKED_UP':
+      case 'IN_TRANSIT':
+        label = 'Out for delivery';
+        bg = AppColors.assignedBg;
+        text = AppColors.assignedText;
+      case 'DELIVERED':
+        label = 'Delivered';
+        bg = AppColors.doneBg;
+        text = AppColors.doneText;
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -591,7 +617,7 @@ class OrderCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(30),
       ),
       child: Text(
-        status,
+        label,
         style: TextStyle(
           color: text,
           fontWeight: FontWeight.bold,

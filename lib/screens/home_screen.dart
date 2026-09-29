@@ -222,8 +222,12 @@ class _OrderList extends StatelessWidget {
   final int tab;
   const _OrderList({required this.controller, required this.tab});
 
+  // Obx must read the order lists itself — the parent Obx only tracks the selected tab,
+  // so without this the list only refreshed when scrolling rebuilt it.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => Obx(() => _buildList(context));
+
+  Widget _buildList(BuildContext context) {
     if (controller.ordersLoading.value) {
       return SliverPadding(
         padding: const EdgeInsets.symmetric(horizontal: 6),
