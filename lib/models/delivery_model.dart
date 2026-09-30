@@ -73,6 +73,9 @@ class DeliveryModel {
     this.deliveredAt,
   });
 
+  /// Cancelled by the customer or admin — either the delivery or its order says so.
+  bool get isCancelled => status == 'CANCELLED' || orderId.isCancelled;
+
   factory DeliveryModel.fromJson(Map<String, dynamic> json) {
     // Some APIs might return orderId as a String ID and put data at root
     // or return it as a populated object.
@@ -129,6 +132,13 @@ class OrderId {
   final String phone;
   final double totalPrice;
 
+  /// Order lifecycle status (e.g. 'pending', 'cancelled').
+  final String status;
+  final String cancellationReason;
+  final DateTime? cancelledAt;
+
+  bool get isCancelled => status.toLowerCase() == 'cancelled';
+
   OrderId({
     required this.id,
     required this.orderNumber,
@@ -144,6 +154,9 @@ class OrderId {
     required this.customerName,
     required this.phone,
     required this.totalPrice,
+    this.status = '',
+    this.cancellationReason = '',
+    this.cancelledAt,
   });
 
   factory OrderId.fromJson(Map<String, dynamic> json) {
@@ -199,6 +212,11 @@ class OrderId {
           : const [],
       placedAt: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'].toString())
+          : null,
+      status: (json['status'] ?? '').toString(),
+      cancellationReason: (json['cancellation'] is Map ? json['cancellation']['reason'] ?? '' : '').toString(),
+      cancelledAt: json['cancellation'] is Map && json['cancellation']['requestedAt'] != null
+          ? DateTime.tryParse(json['cancellation']['requestedAt'].toString())
           : null,
     );
   }

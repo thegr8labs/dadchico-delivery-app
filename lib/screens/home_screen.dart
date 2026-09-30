@@ -144,7 +144,7 @@ class _TabsHeader extends SliverPersistentHeaderDelegate {
         final tabs = [
           ('New', controller.unassignedDeliveries.length),
           ('Active', controller.activeDeliveries.length),
-          ('Done today', controller.todaysTrips.length),
+          ('Done today', controller.todaysFinished.length),
         ];
         return Container(
           padding: const EdgeInsets.all(4),
@@ -238,7 +238,7 @@ class _OrderList extends StatelessWidget {
     final orders = switch (tab) {
       0 => controller.unassignedDeliveries,
       1 => controller.activeDeliveries,
-      _ => controller.todaysTrips,
+      _ => controller.todaysFinished,
     };
 
     if (orders.isEmpty) {

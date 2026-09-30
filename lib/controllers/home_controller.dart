@@ -38,9 +38,15 @@ class HomeController extends GetxController with WidgetsBindingObserver {
   var unassignedDeliveries = <Map<String, dynamic>>[].obs;
   var activeDeliveries = <Map<String, dynamic>>[].obs;
   var doneDeliveries = <Map<String, dynamic>>[].obs;
+
+  /// Deliveries this driver accepted that were later cancelled by the customer or admin.
+  var cancelledDeliveries = <Map<String, dynamic>>[].obs;
   var lastUpdated = Rxn<DateTime>();
 
   final Set<String> _seenPoolIds = {};
+
+  /// Cancelled deliveries the driver was already told about (avoids a second toast after a 409).
+  final Set<String> _cancelNoticeShown = {};
   bool _poolPrimed = false;
 
   /// Legacy flag some screens still read — true while anything is loading.
@@ -56,6 +62,28 @@ class HomeController extends GetxController with WidgetsBindingObserver {
       final local = date.toLocal();
       return local.year == now.year && local.month == now.month && local.day == now.day;
     }).toList();
+  }
+
+  List<Map<String, dynamic>> get todaysCancelled => cancelledDeliveries.where((o) => _isToday(o['date'])).toList();
+
+  /// "Done today" tab: today's delivered trips plus today's cancelled orders, newest first.
+  /// (Earnings keep using [todaysTrips], which is delivered only.)
+  List<Map<String, dynamic>> get todaysFinished {
+    final list = [...todaysTrips, ...todaysCancelled];
+    list.sort((a, b) {
+      final da = a['date'] as DateTime?;
+      final db = b['date'] as DateTime?;
+      if (da == null || db == null) return 0;
+      return db.compareTo(da);
+    });
+    return list;
+  }
+
+  static bool _isToday(Object? date) {
+    if (date is! DateTime) return false;
+    final now = DateTime.now();
+    final local = date.toLocal();
+    return local.year == now.year && local.month == now.month && local.day == now.day;
   }
 
   var stats = {'earnings': '₹0', 'trips': '0', 'online_hours': '0h'}.obs;
@@ -160,14 +188,19 @@ class HomeController extends GetxController with WidgetsBindingObserver {
       final pool = DeliveryResponse.fromJson(results[0]).data?.deliveries ?? const <DeliveryModel>[];
       final mine = DeliveryResponse.fromJson(results[1]).data?.deliveries ?? const <DeliveryModel>[];
 
-      final poolMapped = pool.where((d) => d.status == 'UNASSIGNED').map(_mapDeliveryToUiFormat).toList();
+      final poolMapped =
+          pool.where((d) => d.status == 'UNASSIGNED' && !d.isCancelled).map(_mapDeliveryToUiFormat).toList();
       _announceNewRequests(poolMapped);
       unassignedDeliveries.value = poolMapped;
 
       final mineMapped = mine.map(_mapDeliveryToUiFormat).toList();
+      // Cancelled deliveries are mapped to status 'CANCELLED', so they never match the active set.
       const activeStatuses = {'ASSIGNED', 'PICKED_UP', 'IN_TRANSIT'};
+      final previousActiveIds = activeDeliveries.map((o) => o['delivery_id']).toSet();
       activeDeliveries.value = mineMapped.where((o) => activeStatuses.contains(o['status'])).toList();
       doneDeliveries.value = mineMapped.where((o) => o['status'] == 'DELIVERED').toList();
+      cancelledDeliveries.value = mineMapped.where((o) => o['status'] == 'CANCELLED').toList();
+      _announceCancellations(previousActiveIds);
 
       ordersError.value = '';
       lastUpdated.value = DateTime.now();
@@ -210,6 +243,23 @@ class HomeController extends GetxController with WidgetsBindingObserver {
       Get.find<NotificationService>().show(title, body);
     }
     ordersTab.value = 0;
+  }
+
+  /// Tell the driver when an order they were working on gets cancelled.
+  void _announceCancellations(Set<Object?> previousActiveIds) {
+    final cancelled = cancelledDeliveries
+        .where((o) => previousActiveIds.contains(o['delivery_id']) && !_cancelNoticeShown.contains(o['delivery_id']))
+        .toList();
+    _cancelNoticeShown.addAll(cancelled.map((o) => o['delivery_id'] as String));
+    if (cancelled.isEmpty) return;
+    HapticFeedback.heavyImpact();
+    final first = cancelled.first;
+    final reason = (first['cancel_reason'] ?? '').toString();
+    _toast(
+      cancelled.length == 1 ? 'Order #${first['id']} cancelled' : '${cancelled.length} orders cancelled',
+      reason.isNotEmpty ? 'Reason: $reason. No further action is needed.' : 'No further action is needed.',
+      error: true,
+    );
   }
 
   Map<String, dynamic> _mapDeliveryToUiFormat(DeliveryModel delivery) {
@@ -257,6 +307,7 @@ class HomeController extends GetxController with WidgetsBindingObserver {
       nextLat = delivery.customerLocation.latitude;
       nextLng = delivery.customerLocation.longitude;
     }
+    if (delivery.isCancelled) nextStep = "Order cancelled";
 
     return {
       'delivery_id': delivery.id,
@@ -267,8 +318,13 @@ class HomeController extends GetxController with WidgetsBindingObserver {
       'earnings': delivery.finalEarnings ?? delivery.estimatedEarnings,
       'distance': delivery.estimatedDistanceKm,
       'total_stores': delivery.pickupSummary.totalVendors,
-      'date': delivery.deliveredAt ?? delivery.updatedAt ?? delivery.createdAt,
-      'status': delivery.status, // UNASSIGNED
+      'date': delivery.isCancelled
+          ? delivery.orderId.cancelledAt ?? delivery.updatedAt ?? delivery.createdAt
+          : delivery.deliveredAt ?? delivery.updatedAt ?? delivery.createdAt,
+      // Normalised to 'CANCELLED' whenever the delivery or its order is cancelled,
+      // so no action (accept / pickup / deliver) ever matches a cancelled order.
+      'status': delivery.isCancelled ? 'CANCELLED' : delivery.status,
+      'cancel_reason': delivery.orderId.cancellationReason,
       'next_step': nextStep,
       'next_step_lat': nextLat,
       'next_step_lng': nextLng,
@@ -382,7 +438,14 @@ class HomeController extends GetxController with WidgetsBindingObserver {
       await Future.wait([fetchOrders(silent: true), fetchProfileSummary(period: selectedPeriod.value)]);
     } catch (e) {
       if (_handleAuthError(e)) return;
-      _toast('Action failed', _messageOf(e), error: true);
+      if (e is ApiException && e.isOrderCancelled) {
+        // Busy keys for pickups are "deliveryId:vendorId".
+        _cancelNoticeShown.add(deliveryId.split(':').first);
+        HapticFeedback.heavyImpact();
+        _toast('Order cancelled', e.message, error: true);
+      } else {
+        _toast('Action failed', _messageOf(e), error: true);
+      }
       // The order may have changed (e.g. someone else accepted it) — resync.
       fetchOrders(silent: true);
     } finally {

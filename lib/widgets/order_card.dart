@@ -16,6 +16,7 @@ class OrderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final HomeController homeController = Get.find<HomeController>();
+    final bool isCancelled = _isCancelled(order);
 
     if (!isActive) {
       return Container(
@@ -36,19 +37,23 @@ class OrderCard extends StatelessWidget {
                   Text(order['customer'] ?? 'Customer', style: AppStyle.title),
                   const SizedBox(height: 4),
                   Text(order['id'] ?? '', style: AppStyle.caption),
+                  if (isCancelled) ...[
+                    const SizedBox(height: 6),
+                    _buildCancelReason(order),
+                  ],
                 ],
               ),
             ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: AppColors.doneBg,
+                color: isCancelled ? AppColors.cancelledBg : AppColors.doneBg,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Text(
-                "Done",
+              child: Text(
+                isCancelled ? "Cancelled" : "Done",
                 style: TextStyle(
-                  color: AppColors.doneText,
+                  color: isCancelled ? AppColors.cancelledText : AppColors.doneText,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -75,7 +80,7 @@ class OrderCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                color: const Color(0xFFFFF7ED),
+                color: isCancelled ? AppColors.cancelledBg : const Color(0xFFFFF7ED),
                 borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(16),
                   topRight: Radius.circular(16),
@@ -96,42 +101,43 @@ class OrderCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      if (order['next_step_lat'] != null &&
-                          order['next_step_lng'] != null) {
-                        MapUtils.openMapWithCoords(
-                          order['next_step_lat'],
-                          order['next_step_lng'],
-                        );
-                      } else {
-                        MapUtils.openMap(order['next_step']);
-                      }
-                    },
-                    icon: const Icon(
-                      Icons.near_me,
-                      size: 16,
-                      color: Colors.white,
-                    ),
-                    label: const Text(
-                      "Navigate",
-                      style: TextStyle(color: Colors.white, fontSize: 12),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryBlue,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
+                  if (!isCancelled)
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        if (order['next_step_lat'] != null &&
+                            order['next_step_lng'] != null) {
+                          MapUtils.openMapWithCoords(
+                            order['next_step_lat'],
+                            order['next_step_lng'],
+                          );
+                        } else {
+                          MapUtils.openMap(order['next_step']);
+                        }
+                      },
+                      icon: const Icon(
+                        Icons.near_me,
+                        size: 16,
+                        color: Colors.white,
                       ),
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ), // vertical removed
-                      minimumSize: Size.zero, // removes default min height
-                      tapTargetSize: MaterialTapTargetSize
-                          .shrinkWrap, // removes tap target padding
+                      label: const Text(
+                        "Navigate",
+                        style: TextStyle(color: Colors.white, fontSize: 12),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primaryBlue,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ), // vertical removed
+                        minimumSize: Size.zero, // removes default min height
+                        tapTargetSize: MaterialTapTargetSize
+                            .shrinkWrap, // removes tap target padding
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -194,11 +200,14 @@ class OrderCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    PaymentBadge(
-                      isCod: order['is_cod'] == true,
-                      isPaid: order['is_paid'] == true,
-                      total: order['total_price'] ?? 0,
-                    ),
+                    if (isCancelled)
+                      _buildCancelReason(order)
+                    else
+                      PaymentBadge(
+                        isCod: order['is_cod'] == true,
+                        isPaid: order['is_paid'] == true,
+                        total: order['total_price'] ?? 0,
+                      ),
                   ],
                 ),
               ),
@@ -240,69 +249,80 @@ class OrderCard extends StatelessWidget {
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
-                    // Action Buttons
-                    Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => MapUtils.openMap(order['next_step']),
-                            child: _buildActionButton(
-                              "Map",
-                              Icons.map_outlined,
-                              const Color(0xFFEFF6FF),
-                              AppColors.primaryBlue,
+                    // Action Buttons (none for cancelled orders except the invoice)
+                    if (isCancelled)
+                      GestureDetector(
+                        onTap: () => showInvoiceSheet(context, order),
+                        child: _buildActionButton(
+                          "Invoice",
+                          Icons.receipt_long_outlined,
+                          const Color(0xFFF1F5F9),
+                          AppColors.textPrimary,
+                        ),
+                      )
+                    else
+                      Row(
+                        children: [
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => MapUtils.openMap(order['next_step']),
+                              child: _buildActionButton(
+                                "Map",
+                                Icons.map_outlined,
+                                const Color(0xFFEFF6FF),
+                                AppColors.primaryBlue,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => showInvoiceSheet(context, order),
-                            child: _buildActionButton(
-                              "Invoice",
-                              Icons.receipt_long_outlined,
-                              const Color(0xFFF1F5F9),
-                              AppColors.textPrimary,
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => showInvoiceSheet(context, order),
+                              child: _buildActionButton(
+                                "Invoice",
+                                Icons.receipt_long_outlined,
+                                const Color(0xFFF1F5F9),
+                                AppColors.textPrimary,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              final stops = order['stops'] as List;
-                              final stores = stops
-                                  .where((s) => s['type'] == 'store')
-                                  .toList();
-                              final customer = stops.firstWhere(
-                                (s) => s['type'] == 'customer',
-                              );
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                final stops = order['stops'] as List;
+                                final stores = stops
+                                    .where((s) => s['type'] == 'store')
+                                    .toList();
+                                final customer = stops.firstWhere(
+                                  (s) => s['type'] == 'customer',
+                                );
 
-                              MapUtils.openFullRoute(
-                                waypoints: stores
-                                    .map(
-                                      (s) => {
-                                        'lat': s['lat'] as double,
-                                        'lng': s['lng'] as double,
-                                      },
-                                    )
-                                    .toList(),
-                                destination: {
-                                  'lat': customer['lat'] as double,
-                                  'lng': customer['lng'] as double,
-                                },
-                              );
-                            },
-                            child: _buildActionButton(
-                              "Route",
-                              Icons.route_outlined,
-                              const Color(0xFFF0FDF4),
-                              AppColors.primaryGreen,
+                                MapUtils.openFullRoute(
+                                  waypoints: stores
+                                      .map(
+                                        (s) => {
+                                          'lat': s['lat'] as double,
+                                          'lng': s['lng'] as double,
+                                        },
+                                      )
+                                      .toList(),
+                                  destination: {
+                                    'lat': customer['lat'] as double,
+                                    'lng': customer['lng'] as double,
+                                  },
+                                );
+                              },
+                              child: _buildActionButton(
+                                "Route",
+                                Icons.route_outlined,
+                                const Color(0xFFF0FDF4),
+                                AppColors.primaryGreen,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
                     const SizedBox(height: 20),
                     // Stops List
                     ...(order['stops'] as List)
@@ -310,7 +330,7 @@ class OrderCard extends StatelessWidget {
                         .toList(),
                     const SizedBox(height: 10),
                     // Bottom Button (Only show Accept for Unassigned)
-                    if (order['status'] == 'UNASSIGNED')
+                    if (order['status'] == 'UNASSIGNED' && !isCancelled)
                       Obx(() {
                         final busy = homeController.isBusy(order['delivery_id']);
                         final online = homeController.isOnline.value;
@@ -377,6 +397,7 @@ class OrderCard extends StatelessWidget {
     final HomeController homeController = Get.find<HomeController>();
     bool isPicked = stop['status'] == 'picked';
     bool isCustomer = stop['type'] == 'customer';
+    final bool isCancelled = _isCancelled(order);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -438,7 +459,7 @@ class OrderCard extends StatelessWidget {
                           color: AppColors.primaryGreen,
                         ),
                       )
-                    else if (!isCustomer && order['status'] == 'ASSIGNED')
+                    else if (!isCustomer && order['status'] == 'ASSIGNED' && !isCancelled)
                       Obx(() {
                         final busy = homeController.isBusy('${order['delivery_id']}:${stop['vendor_id']}');
                         return SizedBox(
@@ -489,6 +510,8 @@ class OrderCard extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
+                ] else if (isCancelled) ...[
+                  // Cancelled: no directions / calls — nothing more to do on this order.
                 ] else if (!isCustomer) ...[
                   const SizedBox(height: 8),
                   GestureDetector(
@@ -589,6 +612,32 @@ class OrderCard extends StatelessWidget {
 
   static bool _canDeliver(String? status) => status == 'PICKED_UP' || status == 'IN_TRANSIT';
 
+  static bool _isCancelled(Map<String, dynamic> order) => order['status'] == 'CANCELLED';
+
+  /// Red "Order cancelled · reason" note shown instead of payment / actions.
+  Widget _buildCancelReason(Map<String, dynamic> order) {
+    final reason = (order['cancel_reason'] ?? '').toString().trim();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(color: AppColors.cancelledBg, borderRadius: BorderRadius.circular(10)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.cancel_outlined, size: 16, color: AppColors.cancelledText),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              reason.isNotEmpty ? 'Order cancelled · $reason' : 'Order cancelled · no action needed',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: AppColors.cancelledText, fontWeight: FontWeight.bold, fontSize: 12.5),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStatusTag(String status) {
     Color bg = AppColors.pickingUpBg;
     Color text = AppColors.pickingUpText;
@@ -609,6 +658,10 @@ class OrderCard extends StatelessWidget {
         label = 'Delivered';
         bg = AppColors.doneBg;
         text = AppColors.doneText;
+      case 'CANCELLED':
+        label = 'Cancelled';
+        bg = AppColors.cancelledBg;
+        text = AppColors.cancelledText;
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

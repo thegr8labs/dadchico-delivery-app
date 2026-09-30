@@ -33,4 +33,6 @@ class AppColors {
   static const Color assignedText = Color(0xFF2563EB);
   static const Color doneBg = Color(0xFFDCFCE7);
   static const Color doneText = Color(0xFF166534);
+  static const Color cancelledBg = Color(0xFFFEE2E2);
+  static const Color cancelledText = Color(0xFFB91C1C);
 }

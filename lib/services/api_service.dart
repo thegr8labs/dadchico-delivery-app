@@ -12,9 +12,15 @@ class ApiException implements Exception {
   final String message;
   final int? statusCode;
 
-  const ApiException(this.message, {this.statusCode});
+  /// Machine-readable reason from the server body (e.g. 'order_cancelled'), when provided.
+  final String? reason;
+
+  const ApiException(this.message, {this.statusCode, this.reason});
 
   bool get isUnauthorized => statusCode == 401;
+
+  /// The order was cancelled by the customer or admin — no further action is possible on it.
+  bool get isOrderCancelled => statusCode == 409 && reason == 'order_cancelled';
 
   @override
   String toString() => message;
@@ -103,6 +109,7 @@ class ApiService {
     if (response.statusCode >= 200 && response.statusCode < 300 && body != null) return body;
 
     final serverMessage = body?['message'] is String ? body!['message'] as String : null;
+    final reason = body?['reason'] is String ? body!['reason'] as String : null;
     if (response.statusCode == 401) {
       throw ApiException(serverMessage ?? 'Your session has expired. Please log in again.', statusCode: 401);
     }
@@ -112,6 +119,6 @@ class ApiService {
     if (response.statusCode >= 500) {
       throw ApiException('Dadchico is having trouble right now. Please try again shortly.', statusCode: response.statusCode);
     }
-    throw ApiException(serverMessage ?? fallback, statusCode: response.statusCode);
+    throw ApiException(serverMessage ?? fallback, statusCode: response.statusCode, reason: reason);
   }
 }

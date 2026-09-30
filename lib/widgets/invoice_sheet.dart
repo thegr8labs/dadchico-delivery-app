@@ -50,6 +50,8 @@ Future<void> showInvoiceSheet(BuildContext context, Map<String, dynamic> order) 
   final bool isCod = order['is_cod'] == true;
   final bool isPaid = order['is_paid'] == true;
   final DateTime? placedAt = order['placed_at'] as DateTime?;
+  final bool isCancelled = order['status'] == 'CANCELLED';
+  final String cancelReason = (order['cancel_reason'] ?? '').toString().trim();
 
   return showModalBottomSheet(
     context: context,
@@ -94,7 +96,28 @@ Future<void> showInvoiceSheet(BuildContext context, Map<String, dynamic> order) 
               ],
             ),
             const SizedBox(height: 14),
-            PaymentBadge(isCod: isCod, isPaid: isPaid, total: total),
+            if (isCancelled)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: AppColors.cancelledBg, borderRadius: BorderRadius.circular(12)),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.cancel_outlined, size: 18, color: AppColors.cancelledText),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        cancelReason.isNotEmpty
+                            ? 'This order was cancelled · $cancelReason. No further action is needed.'
+                            : 'This order was cancelled. No further action is needed.',
+                        style: const TextStyle(color: AppColors.cancelledText, fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              PaymentBadge(isCod: isCod, isPaid: isPaid, total: total),
             const SizedBox(height: 16),
             Text('Deliver to', style: AppStyle.caption),
             const SizedBox(height: 2),
