@@ -93,6 +93,13 @@ class _LoginScreenState extends State<LoginScreen> {
                         controller: _password,
                         focusNode: _passwordFocus,
                         obscureText: _auth.isPasswordHidden.value,
+                        // Keep the keyboard from capitalising or "correcting" the password when it's shown
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        textCapitalization: TextCapitalization.none,
+                        smartDashesType: SmartDashesType.disabled,
+                        smartQuotesType: SmartQuotesType.disabled,
+                        keyboardType: TextInputType.visiblePassword,
                         textInputAction: TextInputAction.done,
                         autofillHints: const [AutofillHints.password],
                         style: AppStyle.title,
@@ -111,6 +118,13 @@ class _LoginScreenState extends State<LoginScreen> {
                             onPressed: _auth.togglePasswordVisibility,
                           ),
                         ),
+                      ),
+                    ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => Get.toNamed('/forgot-password', arguments: _email.text.trim()),
+                        child: const Text('Forgot password?'),
                       ),
                     ),
                     Obx(() {
@@ -177,7 +191,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              'Forgot your password or new here? Contact the Dadchico team.',
+                              'New here or need help? Contact the Dadchico team.',
                               style: AppStyle.caption.copyWith(color: AppColors.textPrimary),
                             ),
                           ),

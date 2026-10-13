@@ -5,9 +5,16 @@ class AuthService extends ApiService {
   Future<Map<String, dynamic>> login(String email, String password) async {
     final response = await post('/auth/login', {
       'identifier': email.trim(),
-      'password': password,
+      // Trim spaces picked up when copying the password from the invite email
+      'password': password.trim(),
     });
     return ApiService.decode(response, fallback: 'Login failed. Check your email and password.');
+  }
+
+  /// Emails a password reset link. The server answers the same whether or not the email exists.
+  Future<void> forgotPassword(String email) async {
+    final response = await post('/auth/forgot-password', {'email': email.trim()});
+    ApiService.decode(response, fallback: 'Could not send the reset link. Please try again.');
   }
 
   /// Best-effort server logout (clears server cookies / refresh token).

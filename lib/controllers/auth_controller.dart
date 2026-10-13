@@ -70,7 +70,11 @@ class AuthController extends GetxController {
         duration: const Duration(seconds: 2),
       );
     } on ApiException catch (e) {
-      errorMessage.value = e.statusCode == 401 ? 'Incorrect email or password.' : e.message;
+      // Only a bad email/password comes back as "Invalid credentials"; show the real reason
+      // for anything else (e.g. locked after too many tries, or an inactive account).
+      errorMessage.value = e.statusCode == 401 && e.message == 'Invalid credentials'
+          ? 'Incorrect email or password.'
+          : e.message;
     } catch (e) {
       debugPrint('Login error: $e');
       errorMessage.value = 'Something went wrong while signing in. Please try again.';

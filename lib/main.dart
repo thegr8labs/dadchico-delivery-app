@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'screens/forgot_password_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_screen.dart';
 import 'screens/splash_screen.dart';
@@ -59,6 +60,7 @@ class DeliveryApp extends StatelessWidget {
       getPages: [
         GetPage(name: '/', page: () => const SplashScreen(), transition: Transition.fade),
         GetPage(name: '/login', page: () => const LoginScreen(), transition: Transition.fadeIn),
+        GetPage(name: '/forgot-password', page: () => const ForgotPasswordScreen(), transition: Transition.rightToLeft),
         GetPage(name: '/home', page: () => const MainScreen(), transition: Transition.fadeIn),
       ],
     );
