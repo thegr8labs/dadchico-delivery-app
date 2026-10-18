@@ -103,7 +103,8 @@ class HomeController extends GetxController with WidgetsBindingObserver {
     if (Get.isRegistered<NotificationService>()) {
       final notifications = Get.find<NotificationService>();
       notifications.onOrdersChanged = () => fetchOrders(silent: true);
-      notifications.registerDevice();
+      // Drivers whose session was restored never saw the login-time permission prompt.
+      notifications.requestPermission().then((_) => notifications.registerDevice());
     }
     refreshAllData();
     _startPolling();
@@ -124,6 +125,12 @@ class HomeController extends GetxController with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       fetchOrders(silent: true);
       _startPolling();
+      // Driver may have just changed notification/battery settings, or a registration failed offline.
+      if (Get.isRegistered<NotificationService>()) {
+        final notifications = Get.find<NotificationService>();
+        notifications.refreshHealth();
+        notifications.registerDevice();
+      }
     } else if (state == AppLifecycleState.paused) {
       _pollTimer?.cancel();
     }

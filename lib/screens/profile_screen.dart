@@ -5,6 +5,7 @@ import '../utils/app_colors.dart';
 import '../utils/app_style.dart';
 import '../controllers/home_controller.dart';
 import '../controllers/auth_controller.dart';
+import '../services/notification_service.dart';
 import '../services/storage_service.dart';
 import '../models/user_model.dart';
 import '../widgets/top_banner.dart';
@@ -46,6 +47,8 @@ class ProfileScreen extends StatelessWidget {
                     ? const BigCardShimmer() 
                     : _buildDetailsCard(user)),
                   const SizedBox(height: 20),
+                  const _TestAlertButton(),
+                  const SizedBox(height: 10),
                   _buildLogoutButton(authController),
                   const SizedBox(height: 30),
                 ],
@@ -285,6 +288,52 @@ Widget _buildDetailsCard(UserModel? user) {
       ],
     ),
   );
+}
+
+/// Sends a real push to this phone so drivers can check alerts arrive with the app closed.
+class _TestAlertButton extends StatefulWidget {
+  const _TestAlertButton();
+
+  @override
+  State<_TestAlertButton> createState() => _TestAlertButtonState();
+}
+
+class _TestAlertButtonState extends State<_TestAlertButton> {
+  bool _sending = false;
+
+  Future<void> _send() async {
+    if (!Get.isRegistered<NotificationService>()) return;
+    setState(() => _sending = true);
+    final message = await Get.find<NotificationService>().sendTestPush();
+    if (!mounted) return;
+    setState(() => _sending = false);
+    Get.snackbar('Order alerts', message, duration: const Duration(seconds: 5));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 56,
+      child: TextButton(
+        onPressed: _sending ? null : _send,
+        style: TextButton.styleFrom(
+          foregroundColor: AppColors.primaryGreen,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _sending
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.notifications_active_rounded),
+            const SizedBox(width: 10),
+            Text('Send test order alert', style: AppStyle.title.copyWith(color: AppColors.primaryGreen)),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 Widget _buildLogoutButton(AuthController controller) {
