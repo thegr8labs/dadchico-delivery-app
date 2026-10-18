@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 
 import '../controllers/home_controller.dart';
+import '../services/notification_service.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_style.dart';
 import '../widgets/order_card.dart';
@@ -30,6 +31,7 @@ class HomeScreen extends StatelessWidget {
               slivers: [
                 const SliverToBoxAdapter(child: ProfileHeaderWidget()),
                 SliverToBoxAdapter(child: _OfflineNotice(controller: c)),
+                const SliverToBoxAdapter(child: _AlertsNotice()),
                 SliverToBoxAdapter(child: _Stats(controller: c)),
                 SliverPersistentHeader(pinned: true, delegate: _TabsHeader(controller: c)),
                 Obx(() => _OrderList(controller: c, tab: c.ordersTab.value)),
@@ -74,6 +76,49 @@ class _OfflineNotice extends StatelessWidget {
               onPressed: controller.togglingOnline.value ? null : () => controller.toggleOnline(true),
               child: const Text('Go online'),
             ),
+          ],
+        ),
+      );
+    });
+  }
+}
+
+/// Warns the driver when new-order alerts can't reach them while the app is closed.
+class _AlertsNotice extends StatelessWidget {
+  const _AlertsNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    if (!Get.isRegistered<NotificationService>()) return const SizedBox.shrink();
+    final n = Get.find<NotificationService>();
+    return Obx(() {
+      final (String message, String? action) = !n.pushAvailable
+          ? ('Order alerts only work while the app is open on this build.', null)
+          : !n.permissionGranted.value
+              ? ('Notifications are off. Turn them on so you get new orders when the app is closed.', 'Turn on')
+              : !n.batteryUnrestricted.value
+                  ? ('Battery saver can block new-order alerts when the app is closed. Allow the app to run in the background.', 'Allow')
+                  : !n.deviceRegistered.value
+                      ? ("This phone isn't registered for order alerts yet.", 'Retry')
+                      : ('', null);
+      if (message.isEmpty) return const SizedBox.shrink();
+      return Container(
+        margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFEF2F2),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFFECACA)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.notifications_off_rounded, color: Color(0xFFDC2626)),
+            const SizedBox(width: 12),
+            Expanded(child: Text(message, style: AppStyle.body.copyWith(color: const Color(0xFF991B1B)))),
+            if (action != null) ...[
+              const SizedBox(width: 8),
+              TextButton(onPressed: n.fixAlerts, child: Text(action)),
+            ],
           ],
         ),
       );
