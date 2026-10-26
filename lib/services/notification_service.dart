@@ -243,12 +243,14 @@ class NotificationService extends GetxService {
     }
   }
 
-  /// Stop pushes to this device (call on logout, before clearing the session).
-  Future<void> unregisterDevice() async {
+  /// Stop pushes to this device on logout. Pass [headers] captured before the session was
+  /// cleared, or call before clearing it.
+  Future<void> unregisterDevice({Map<String, String>? headers}) async {
     final token = _box.read<String>(_tokenKey);
     if (token == null || token.isEmpty) return;
     try {
-      await _api.delete('/driver/device-token', body: {'fcmToken': token}, extraHeaders: ApiService.authHeaders());
+      await _api.delete('/driver/device-token',
+          body: {'fcmToken': token}, extraHeaders: headers ?? ApiService.authHeaders());
     } catch (e) {
       debugPrint('Device token removal failed: $e');
     } finally {

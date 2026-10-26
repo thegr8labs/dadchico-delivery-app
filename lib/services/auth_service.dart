@@ -18,9 +18,10 @@ class AuthService extends ApiService {
   }
 
   /// Best-effort server logout (clears server cookies / refresh token).
-  Future<void> logout() async {
+  /// [headers]: auth headers captured before the local session was cleared.
+  Future<void> logout({Map<String, String>? headers}) async {
     try {
-      await post('/auth/logout', {}, extraHeaders: ApiService.authHeaders());
+      await post('/auth/logout', {}, extraHeaders: headers ?? ApiService.authHeaders());
     } catch (_) {
       // Ignore — local sign-out always succeeds.
     }

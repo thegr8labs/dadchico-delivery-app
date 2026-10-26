@@ -6,7 +6,8 @@ import '../controllers/home_controller.dart';
 class InitialBinding extends Bindings {
   @override
   void dependencies() {
-    Get.put(StorageService(), permanent: true);
+    // Normally already loaded in main(); this covers tests that pump the app directly.
+    if (!Get.isRegistered<StorageService>()) Get.put(StorageService(), permanent: true);
     Get.lazyPut(() => AuthController(), fenix: true);
     Get.lazyPut(() => HomeController(), fenix: true);
   }

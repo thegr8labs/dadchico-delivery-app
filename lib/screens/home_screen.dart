@@ -25,7 +25,7 @@ class HomeScreen extends StatelessWidget {
         Expanded(
           child: RefreshIndicator(
             color: AppColors.primaryGreen,
-            onRefresh: () => Future.wait([c.fetchOrders(silent: true), c.fetchProfileSummary(period: 'today')]),
+            onRefresh: () => Future.wait([c.fetchOrders(silent: true), c.fetchTodayStats()]),
             child: CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
@@ -299,6 +299,11 @@ class _OrderList extends StatelessWidget {
         );
       }
       final (icon, title, message) = switch (tab) {
+        0 when controller.poolNotice.value.isNotEmpty => (
+            Icons.block_rounded,
+            "Can't show new requests",
+            controller.poolNotice.value,
+          ),
         0 => controller.isOnline.value
             ? (
                 Icons.notifications_active_outlined,
