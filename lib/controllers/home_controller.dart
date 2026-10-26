@@ -388,20 +388,19 @@ class HomeController extends GetxController with WidgetsBindingObserver {
       'lng': delivery.customerLocation.longitude,
     });
 
-    String nextStep =
-        "Pick from ${delivery.vendorPickups.isNotEmpty ? delivery.vendorPickups[0].storeName : 'Store'}";
-    double? nextLat = delivery.vendorPickups.isNotEmpty
-        ? delivery.vendorPickups[0].location.latitude
-        : delivery.customerLocation.latitude;
-    double? nextLng = delivery.vendorPickups.isNotEmpty
-        ? delivery.vendorPickups[0].location.longitude
-        : delivery.customerLocation.longitude;
+    // Next stop: the first store still to pick up, then the customer.
+    final pendingStores = delivery.vendorPickups.where((vp) => vp.status == 'pending').toList();
+    final nextStore = delivery.pickupSummary.allPicked
+        ? null
+        : pendingStores.isNotEmpty
+            ? pendingStores.first
+            : delivery.vendorPickups.isNotEmpty
+                ? delivery.vendorPickups.first
+                : null;
 
-    if (delivery.pickupSummary.allPicked) {
-      nextStep = "Deliver to Customer";
-      nextLat = delivery.customerLocation.latitude;
-      nextLng = delivery.customerLocation.longitude;
-    }
+    String nextStep = nextStore != null ? "Pick from ${nextStore.storeName.isNotEmpty ? nextStore.storeName : 'Store'}" : "Deliver to Customer";
+    double? nextLat = nextStore?.location.latitude ?? delivery.customerLocation.latitude;
+    double? nextLng = nextStore?.location.longitude ?? delivery.customerLocation.longitude;
     if (delivery.isCancelled) nextStep = "Order cancelled";
 
     return {
@@ -423,6 +422,13 @@ class HomeController extends GetxController with WidgetsBindingObserver {
       'next_step': nextStep,
       'next_step_lat': nextLat,
       'next_step_lng': nextLng,
+      'next_type': nextStore != null ? 'store' : 'customer',
+      'next_name': nextStore != null
+          ? (nextStore.storeName.isNotEmpty ? nextStore.storeName : 'Store')
+          : delivery.orderId.customerName,
+      'next_address': nextStore != null ? nextStore.location.address : delivery.customerLocation.address,
+      'next_vendor_id': nextStore?.storeId,
+      'customer_notes': delivery.orderId.customerNotes,
       'progress': delivery.pickupSummary.totalVendors > 0
           ? delivery.pickupSummary.pickedVendors /
                 delivery.pickupSummary.totalVendors

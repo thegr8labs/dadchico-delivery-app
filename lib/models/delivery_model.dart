@@ -92,6 +92,7 @@ class DeliveryModel {
     if (json['customer'] != null) orderData['customer'] = json['customer'];
     if (json['customerId'] != null) orderData['customerId'] = json['customerId'];
     if (json['pricing'] != null) orderData['pricing'] = json['pricing'];
+    if (json['customerNotes'] != null) orderData['customerNotes'] = json['customerNotes'];
 
     return DeliveryModel(
       id: json['_id'] ?? '',
@@ -137,6 +138,9 @@ class OrderId {
   final String cancellationReason;
   final DateTime? cancelledAt;
 
+  /// Delivery instructions the customer typed at checkout (gate code, landmark…). May be empty.
+  final String customerNotes;
+
   bool get isCancelled => status.toLowerCase() == 'cancelled';
 
   OrderId({
@@ -157,6 +161,7 @@ class OrderId {
     this.status = '',
     this.cancellationReason = '',
     this.cancelledAt,
+    this.customerNotes = '',
   });
 
   factory OrderId.fromJson(Map<String, dynamic> json) {
@@ -218,6 +223,7 @@ class OrderId {
       cancelledAt: json['cancellation'] is Map && json['cancellation']['requestedAt'] != null
           ? DateTime.tryParse(json['cancellation']['requestedAt'].toString())
           : null,
+      customerNotes: json['customerNotes'] is String ? (json['customerNotes'] as String).trim() : '',
     );
   }
 }
