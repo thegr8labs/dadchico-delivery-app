@@ -92,13 +92,17 @@ class _AlertsNotice extends StatelessWidget {
     if (!Get.isRegistered<NotificationService>()) return const SizedBox.shrink();
     final n = Get.find<NotificationService>();
     return Obx(() {
+      // Read every observable up front: Obx throws if a build reads none (e.g. push unavailable).
+      final granted = n.permissionGranted.value;
+      final unrestricted = n.batteryUnrestricted.value;
+      final registered = n.deviceRegistered.value;
       final (String message, String? action) = !n.pushAvailable
           ? ('Order alerts only work while the app is open on this build.', null)
-          : !n.permissionGranted.value
+          : !granted
               ? ('Notifications are off. Turn them on so you get new orders when the app is closed.', 'Turn on')
-              : !n.batteryUnrestricted.value
+              : !unrestricted
                   ? ('Battery saver can block new-order alerts when the app is closed. Allow the app to run in the background.', 'Allow')
-                  : !n.deviceRegistered.value
+                  : !registered
                       ? ("This phone isn't registered for order alerts yet.", 'Retry')
                       : ('', null);
       if (message.isEmpty) return const SizedBox.shrink();
@@ -334,7 +338,9 @@ class _OrderList extends StatelessWidget {
               ),
             );
           }
-          return OrderCard(order: orders[i], isActive: tab != 2);
+          final order = orders[i];
+          // Keyed by delivery so refreshes update cards in place instead of rebuilding them.
+          return OrderCard(key: ValueKey(order['delivery_id']), order: order, isActive: tab != 2);
         },
       ),
     );

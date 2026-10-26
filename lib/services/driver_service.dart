@@ -54,6 +54,12 @@ class DriverService {
     return ApiService.decode(response, fallback: 'Could not update this delivery.');
   }
 
+  /// Live location while deliveries are active. Returns next-stop estimates and when to send next.
+  Future<Map<String, dynamic>> sendLocation(Map<String, dynamic> fix) async {
+    final response = await _apiService.post('/driver/location', fix, extraHeaders: _auth);
+    return ApiService.decode(response, fallback: 'Could not share your location.');
+  }
+
   /// Rate card for the earnings screen. Admin-only on some servers — callers treat failure as "not available".
   Future<Map<String, dynamic>> getRateSettings() async {
     final response = await _apiService.get('/admin/rate-settings', extraHeaders: _auth);

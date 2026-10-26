@@ -9,6 +9,7 @@ import '../services/auth_service.dart';
 import '../services/notification_service.dart';
 import '../services/storage_service.dart';
 import '../utils/app_colors.dart';
+import 'home_controller.dart';
 
 class AuthController extends GetxController {
   final AuthService _authService = AuthService();
@@ -95,6 +96,10 @@ class AuthController extends GetxController {
     try {
       final wasSignedIn = _storageService.isLoggedIn();
       final headers = ApiService.authHeaders();
+      // Stop live location (don't create the home controller just for this).
+      if (Get.isRegistered<HomeController>() && !Get.isPrepared<HomeController>()) {
+        Get.find<HomeController>().stopLocationSharing();
+      }
       await _storageService.clearAuth();
       if (Get.currentRoute != '/login') Get.offAllNamed('/login');
       if (!wasSignedIn) return;

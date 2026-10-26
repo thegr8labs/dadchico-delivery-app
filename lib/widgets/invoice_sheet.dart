@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/delivery_model.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_style.dart';
+import 'customer_notes_box.dart';
 
 String _inr(num v) => '₹${v.toStringAsFixed(v % 1 == 0 ? 0 : 2)}';
 
@@ -124,6 +125,7 @@ Future<void> showInvoiceSheet(BuildContext context, Map<String, dynamic> order) 
             Text('${order['customer'] ?? 'Customer'}', style: AppStyle.title.copyWith(fontSize: 15)),
             if ((order['address'] ?? '').toString().isNotEmpty)
               Text('${order['address']}', style: AppStyle.caption.copyWith(fontSize: 12.5)),
+            CustomerNotesBox(notes: order['customer_notes'], margin: const EdgeInsets.only(top: 12)),
             const Divider(height: 28),
             if (items.isEmpty)
               Text('Item details are not available for this order.', style: AppStyle.caption)

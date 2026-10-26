@@ -8,6 +8,7 @@ import '../models/delivery_model.dart';
 import '../models/profile_summary.dart';
 import '../services/api_service.dart';
 import '../services/driver_service.dart';
+import '../services/location_service.dart';
 import '../services/notification_service.dart';
 import '../services/storage_service.dart';
 import '../utils/app_colors.dart';
@@ -20,6 +21,13 @@ class HomeController extends GetxController with WidgetsBindingObserver {
   Timer? _pollTimer;
 
   var isOnline = true.obs;
+
+  /// Live location for customers' tracking; runs only while deliveries are active.
+  late final LocationService location = LocationService(
+    onAuthError: _handleAuthError,
+    // Server says nothing is active any more: resync the list (which stops GPS if so).
+    onNoActiveDeliveries: () => fetchOrders(silent: true, history: false),
+  );
 
   /// True only until the first order load finishes (shows skeletons).
   var ordersLoading = true.obs;
@@ -116,6 +124,7 @@ class HomeController extends GetxController with WidgetsBindingObserver {
     ever<int>(ordersTab, (tab) {
       if (tab == 2) fetchOrders(silent: true);
     });
+    ever(activeDeliveries, (_) => _syncLocationSharing());
     refreshAllData();
     _startPolling();
   }
@@ -124,6 +133,7 @@ class HomeController extends GetxController with WidgetsBindingObserver {
   void onClose() {
     WidgetsBinding.instance.removeObserver(this);
     _pollTimer?.cancel();
+    location.stop(resetPrompts: true);
     if (Get.isRegistered<NotificationService>()) {
       Get.find<NotificationService>().onOrdersChanged = null;
     }
@@ -135,6 +145,8 @@ class HomeController extends GetxController with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       fetchOrders(silent: true);
       _startPolling();
+      // Location sharing waits for the foreground (Android won't start it from the background).
+      _syncLocationSharing();
       // Driver may have just changed notification/battery settings, or a registration failed offline.
       if (Get.isRegistered<NotificationService>()) {
         final notifications = Get.find<NotificationService>();
@@ -149,7 +161,10 @@ class HomeController extends GetxController with WidgetsBindingObserver {
   void _startPolling() {
     _pollTimer?.cancel();
     _pollTimer = Timer.periodic(_pollInterval, (_) {
-      if (!_signedIn) return;
+      if (!_signedIn) {
+        location.stop(resetPrompts: true);
+        return;
+      }
       // Keep tracking deliveries in hand even after going offline.
       if (isOnline.value || activeDeliveries.isNotEmpty) fetchOrders(silent: true, history: false);
     });
@@ -157,10 +172,29 @@ class HomeController extends GetxController with WidgetsBindingObserver {
 
   bool get _signedIn => !Get.isRegistered<StorageService>() || Get.find<StorageService>().isLoggedIn();
 
+  /// GPS on while a delivery is ASSIGNED / PICKED_UP / IN_TRANSIT, off otherwise. Fixes are
+  /// posted from the GPS stream itself; this only turns it on and off.
+  void _syncLocationSharing() {
+    final ids = {for (final o in activeDeliveries) o['delivery_id'] as String};
+    if (!_signedIn || ids.isEmpty) {
+      location.stop();
+      return;
+    }
+    location.retainOnly(ids);
+    final state = WidgetsBinding.instance.lifecycleState;
+    if (state == null || state == AppLifecycleState.resumed || state == AppLifecycleState.inactive) {
+      location.start();
+    }
+  }
+
+  /// Called on sign-out.
+  void stopLocationSharing() => location.stop(resetPrompts: true);
+
   /// Sign out when the session is no longer valid.
   bool _handleAuthError(Object e) {
     if (e is ApiException && e.isUnauthorized) {
       _pollTimer?.cancel();
+      location.stop(resetPrompts: true);
       // Several calls can fail together; tell the driver (and sign out) once.
       if (_signedIn) {
         _toast('Session expired', 'Please log in again.', error: true);
@@ -354,20 +388,19 @@ class HomeController extends GetxController with WidgetsBindingObserver {
       'lng': delivery.customerLocation.longitude,
     });
 
-    String nextStep =
-        "Pick from ${delivery.vendorPickups.isNotEmpty ? delivery.vendorPickups[0].storeName : 'Store'}";
-    double? nextLat = delivery.vendorPickups.isNotEmpty
-        ? delivery.vendorPickups[0].location.latitude
-        : delivery.customerLocation.latitude;
-    double? nextLng = delivery.vendorPickups.isNotEmpty
-        ? delivery.vendorPickups[0].location.longitude
-        : delivery.customerLocation.longitude;
+    // Next stop: the first store still to pick up, then the customer.
+    final pendingStores = delivery.vendorPickups.where((vp) => vp.status == 'pending').toList();
+    final nextStore = delivery.pickupSummary.allPicked
+        ? null
+        : pendingStores.isNotEmpty
+            ? pendingStores.first
+            : delivery.vendorPickups.isNotEmpty
+                ? delivery.vendorPickups.first
+                : null;
 
-    if (delivery.pickupSummary.allPicked) {
-      nextStep = "Deliver to Customer";
-      nextLat = delivery.customerLocation.latitude;
-      nextLng = delivery.customerLocation.longitude;
-    }
+    String nextStep = nextStore != null ? "Pick from ${nextStore.storeName.isNotEmpty ? nextStore.storeName : 'Store'}" : "Deliver to Customer";
+    double? nextLat = nextStore?.location.latitude ?? delivery.customerLocation.latitude;
+    double? nextLng = nextStore?.location.longitude ?? delivery.customerLocation.longitude;
     if (delivery.isCancelled) nextStep = "Order cancelled";
 
     return {
@@ -389,6 +422,13 @@ class HomeController extends GetxController with WidgetsBindingObserver {
       'next_step': nextStep,
       'next_step_lat': nextLat,
       'next_step_lng': nextLng,
+      'next_type': nextStore != null ? 'store' : 'customer',
+      'next_name': nextStore != null
+          ? (nextStore.storeName.isNotEmpty ? nextStore.storeName : 'Store')
+          : delivery.orderId.customerName,
+      'next_address': nextStore != null ? nextStore.location.address : delivery.customerLocation.address,
+      'next_vendor_id': nextStore?.storeId,
+      'customer_notes': delivery.orderId.customerNotes,
       'progress': delivery.pickupSummary.totalVendors > 0
           ? delivery.pickupSummary.pickedVendors /
                 delivery.pickupSummary.totalVendors

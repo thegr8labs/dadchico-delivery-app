@@ -7,6 +7,13 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Lets the app ask to be exempt from battery optimisation so pushes aren't dropped when closed -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Live location while a delivery is active (customer tracking). Runs as a foreground
+         service with a visible notification, so no background-location permission is needed. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
         android:label="Dadchico Delivery"
