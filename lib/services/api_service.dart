@@ -27,7 +27,10 @@ class ApiException implements Exception {
 }
 
 class ApiService {
-  static const String baseUrl = 'https://api.dadchico.in/api/v1';
+  /// Production API. For a local backend or mock, build/run with
+  /// `--dart-define=API_BASE_URL=http://10.0.2.2:4010/api/v1` (Android emulator) or
+  /// `http://localhost:4010/api/v1` (iOS simulator / tests).
+  static const String baseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: 'https://api.dadchico.in/api/v1');
   static const Duration timeout = Duration(seconds: 20);
 
   static Map<String, String> get headers => {
