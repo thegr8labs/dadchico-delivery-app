@@ -338,7 +338,9 @@ class _OrderList extends StatelessWidget {
               ),
             );
           }
-          return OrderCard(order: orders[i], isActive: tab != 2);
+          final order = orders[i];
+          // Keyed by delivery so refreshes update cards in place instead of rebuilding them.
+          return OrderCard(key: ValueKey(order['delivery_id']), order: order, isActive: tab != 2);
         },
       ),
     );
