@@ -9,12 +9,15 @@ import 'screens/login_screen.dart';
 import 'screens/main_screen.dart';
 import 'screens/splash_screen.dart';
 import 'services/notification_service.dart';
+import 'services/storage_service.dart';
 import 'utils/app_colors.dart';
 import 'utils/initial_binding.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await GetStorage.init();
+  // Tokens (keystore/keychain), migrated from GetStorage on first run of this version.
+  await Get.putAsync(() => StorageService().init(), permanent: true);
   // Order alerts (push + local). Never blocks startup if Firebase isn't configured.
   await Get.putAsync(() => NotificationService().init(), permanent: true);
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(statusBarColor: Colors.transparent));
