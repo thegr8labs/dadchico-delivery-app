@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -83,12 +85,25 @@ class AuthController extends GetxController {
     }
   }
 
+  bool _loggingOut = false;
+
+  /// Signs out locally right away; the server calls (device token, logout) run in the
+  /// background with the headers captured first. Safe to call more than once.
   Future<void> logout() async {
-    if (Get.isRegistered<NotificationService>()) {
-      await Get.find<NotificationService>().unregisterDevice();
+    if (_loggingOut) return;
+    _loggingOut = true;
+    try {
+      final wasSignedIn = _storageService.isLoggedIn();
+      final headers = ApiService.authHeaders();
+      await _storageService.clearAuth();
+      if (Get.currentRoute != '/login') Get.offAllNamed('/login');
+      if (!wasSignedIn) return;
+      if (Get.isRegistered<NotificationService>()) {
+        unawaited(Get.find<NotificationService>().unregisterDevice(headers: headers));
+      }
+      unawaited(_authService.logout(headers: headers));
+    } finally {
+      _loggingOut = false;
     }
-    await _authService.logout();
-    await _storageService.clearAuth();
-    Get.offAllNamed('/login');
   }
 }

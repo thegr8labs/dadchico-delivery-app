@@ -9,6 +9,7 @@ import '../models/profile_summary.dart';
 import '../services/api_service.dart';
 import '../services/driver_service.dart';
 import '../services/notification_service.dart';
+import '../services/storage_service.dart';
 import '../utils/app_colors.dart';
 import 'auth_controller.dart';
 
@@ -26,6 +27,9 @@ class HomeController extends GetxController with WidgetsBindingObserver {
   /// Background refresh in progress (pull-to-refresh / polling) — keeps current data visible.
   var refreshing = false.obs;
   var ordersError = ''.obs;
+
+  /// Why the New tab can't show requests (e.g. 403 for an inactive driver account).
+  var poolNotice = ''.obs;
   var summaryLoading = false.obs;
 
   /// Deliveries with an action (accept / pickup / deliver) in flight.
@@ -86,6 +90,8 @@ class HomeController extends GetxController with WidgetsBindingObserver {
     return local.year == now.year && local.month == now.month && local.day == now.day;
   }
 
+  /// Today's numbers (home + profile). Kept apart from [earningsData], which follows
+  /// the period picked on the earnings screen.
   var stats = {'earnings': '₹0', 'trips': '0', 'online_hours': '0h'}.obs;
   var selectedPeriod = 'today'.obs;
   var earningsData = {
@@ -106,6 +112,10 @@ class HomeController extends GetxController with WidgetsBindingObserver {
       // Drivers whose session was restored never saw the login-time permission prompt.
       notifications.requestPermission().then((_) => notifications.registerDevice());
     }
+    // The Done list isn't polled; load it when the driver opens that tab.
+    ever<int>(ordersTab, (tab) {
+      if (tab == 2) fetchOrders(silent: true);
+    });
     refreshAllData();
     _startPolling();
   }
@@ -139,16 +149,23 @@ class HomeController extends GetxController with WidgetsBindingObserver {
   void _startPolling() {
     _pollTimer?.cancel();
     _pollTimer = Timer.periodic(_pollInterval, (_) {
-      if (isOnline.value) fetchOrders(silent: true);
+      if (!_signedIn) return;
+      // Keep tracking deliveries in hand even after going offline.
+      if (isOnline.value || activeDeliveries.isNotEmpty) fetchOrders(silent: true, history: false);
     });
   }
+
+  bool get _signedIn => !Get.isRegistered<StorageService>() || Get.find<StorageService>().isLoggedIn();
 
   /// Sign out when the session is no longer valid.
   bool _handleAuthError(Object e) {
     if (e is ApiException && e.isUnauthorized) {
       _pollTimer?.cancel();
-      _toast('Session expired', 'Please log in again.', error: true);
-      Get.find<AuthController>().logout();
+      // Several calls can fail together; tell the driver (and sign out) once.
+      if (_signedIn) {
+        _toast('Session expired', 'Please log in again.', error: true);
+        Get.find<AuthController>().logout();
+      }
       return true;
     }
     return false;
@@ -174,12 +191,20 @@ class HomeController extends GetxController with WidgetsBindingObserver {
   /// Set when a fetch is requested while one is already running. The running fetch may
   /// have started before an action (e.g. a pickup) and return stale data, so re-run after it.
   bool _refetchQueued = false;
+  bool _queuedHistory = false;
 
-  Future<void> fetchOrders({bool silent = false}) async {
+  static const _activeStatuses = ['ASSIGNED', 'PICKED_UP', 'IN_TRANSIT'];
+
+  /// [history] also reloads delivered/cancelled orders (Done tab). Polling leaves it off and
+  /// asks only for the pool and active deliveries; history is reloaded when an active one
+  /// drops out (delivered or cancelled), on tab open, pull-to-refresh and after actions.
+  Future<void> fetchOrders({bool silent = false, bool history = true}) async {
     if (refreshing.value) {
       _refetchQueued = true;
+      _queuedHistory = _queuedHistory || history;
       return;
     }
+    var needHistory = false;
     refreshing.value = true;
     if (!silent && unassignedDeliveries.isEmpty && activeDeliveries.isEmpty && doneDeliveries.isEmpty) {
       ordersLoading.value = true;
@@ -187,27 +212,48 @@ class HomeController extends GetxController with WidgetsBindingObserver {
     try {
       // New requests come from the driver pool (only stores mapped to this driver);
       // active/done come ONLY from deliveries assigned to this driver.
+      // A blocked pool (403, e.g. inactive account) must not hide the deliveries in hand.
+      String? blocked;
+      final poolCall = _driverService.getAvailableDeliveries().catchError((Object e) {
+        if (e is ApiException && e.statusCode == 403) {
+          blocked = e.message;
+          return <String, dynamic>{};
+        }
+        throw e;
+      });
       final results = await Future.wait([
-        _driverService.getAvailableDeliveries(),
-        _driverService.getMyOrders(limit: 50),
+        poolCall,
+        if (history)
+          _driverService.getMyOrders(limit: 50)
+        else
+          for (final s in _activeStatuses) _driverService.getMyOrders(status: s, limit: 50),
       ]);
 
       final pool = DeliveryResponse.fromJson(results[0]).data?.deliveries ?? const <DeliveryModel>[];
-      final mine = DeliveryResponse.fromJson(results[1]).data?.deliveries ?? const <DeliveryModel>[];
+      final mine = [
+        for (final r in results.skip(1)) ...?DeliveryResponse.fromJson(r).data?.deliveries,
+      ];
 
       final poolMapped =
           pool.where((d) => d.status == 'UNASSIGNED' && !d.isCancelled).map(_mapDeliveryToUiFormat).toList();
       _announceNewRequests(poolMapped);
       unassignedDeliveries.value = poolMapped;
+      poolNotice.value = blocked ?? '';
 
       final mineMapped = mine.map(_mapDeliveryToUiFormat).toList();
       // Cancelled deliveries are mapped to status 'CANCELLED', so they never match the active set.
-      const activeStatuses = {'ASSIGNED', 'PICKED_UP', 'IN_TRANSIT'};
       final previousActiveIds = activeDeliveries.map((o) => o['delivery_id']).toSet();
-      activeDeliveries.value = mineMapped.where((o) => activeStatuses.contains(o['status'])).toList();
-      doneDeliveries.value = mineMapped.where((o) => o['status'] == 'DELIVERED').toList();
-      cancelledDeliveries.value = mineMapped.where((o) => o['status'] == 'CANCELLED').toList();
-      _announceCancellations(previousActiveIds);
+      activeDeliveries.value = mineMapped.where((o) => _activeStatuses.contains(o['status'])).toList();
+      if (history) {
+        doneDeliveries.value = mineMapped.where((o) => o['status'] == 'DELIVERED').toList();
+        cancelledDeliveries.value = mineMapped.where((o) => o['status'] == 'CANCELLED').toList();
+        _announceCancellations(previousActiveIds);
+      } else {
+        // One left the active set: it was delivered or cancelled — reload history to find out.
+        final nowActive = activeDeliveries.map((o) => o['delivery_id']).toSet();
+        needHistory = previousActiveIds.difference(nowActive).isNotEmpty;
+        if (needHistory) _pendingCancelCheck.addAll(previousActiveIds.difference(nowActive));
+      }
 
       ordersError.value = '';
       lastUpdated.value = DateTime.now();
@@ -219,12 +265,18 @@ class HomeController extends GetxController with WidgetsBindingObserver {
     } finally {
       ordersLoading.value = false;
       refreshing.value = false;
-      if (_refetchQueued) {
+      if (_refetchQueued || needHistory) {
+        final full = _queuedHistory || needHistory;
         _refetchQueued = false;
-        fetchOrders(silent: true);
+        _queuedHistory = false;
+        fetchOrders(silent: true, history: full);
       }
     }
   }
+
+  /// Active deliveries that dropped out during an active-only poll; checked for a
+  /// cancellation on the next history load.
+  final Set<Object?> _pendingCancelCheck = {};
 
   /// Alert the driver (sound + heads-up) when new requests show up after the first load.
   void _announceNewRequests(List<Map<String, dynamic>> pool) {
@@ -254,6 +306,8 @@ class HomeController extends GetxController with WidgetsBindingObserver {
 
   /// Tell the driver when an order they were working on gets cancelled.
   void _announceCancellations(Set<Object?> previousActiveIds) {
+    previousActiveIds = {...previousActiveIds, ..._pendingCancelCheck};
+    _pendingCancelCheck.clear();
     final cancelled = cancelledDeliveries
         .where((o) => previousActiveIds.contains(o['delivery_id']) && !_cancelNoticeShown.contains(o['delivery_id']))
         .toList();
@@ -355,44 +409,67 @@ class HomeController extends GetxController with WidgetsBindingObserver {
     };
   }
 
-  Future<void> fetchProfileSummary({String? period}) async {
+  /// Today's stats, or the earnings for another [period] (earnings screen).
+  Future<void> fetchProfileSummary({String? period}) =>
+      period == null || period == 'today' ? fetchTodayStats() : fetchPeriodEarnings(period);
+
+  /// Today's stats for home/profile (also the earnings card while 'today' is picked).
+  Future<void> fetchTodayStats() async {
+    final data = await _loadSummary('today');
+    if (data == null) return;
+    stats.value = {
+      'earnings': '₹${data.totalEarnings}',
+      'trips': '${data.totalTrips}',
+      'online_hours': '${data.onlineHours}h',
+    };
+    if (selectedPeriod.value == 'today') earningsData.value = _earningsOf(data);
+  }
+
+  /// Earnings card for the selected period; never touches today's stats unless it is today.
+  Future<void> fetchPeriodEarnings(String period) async {
+    if (period == 'today') return fetchTodayStats();
+    final data = await _loadSummary(period);
+    // The driver may have picked another period while this was loading.
+    if (data == null || selectedPeriod.value != period) return;
+    earningsData.value = _earningsOf(data);
+  }
+
+  Map<String, String> _earningsOf(ProfileSummaryData data) => {
+        'earnings': '₹${data.totalEarnings}',
+        'trips': '${data.totalTrips}',
+        'tips': '₹0', // Tips not in current API model
+        'distance': '0 km', // Distance not in current API model
+      };
+
+  int _summaryCalls = 0;
+
+  Future<ProfileSummaryData?> _loadSummary(String period) async {
+    _summaryCalls++;
     summaryLoading.value = true;
     try {
       final responseMap = await _driverService.getProfileSummary(period: period);
       final response = ProfileSummaryResponse.fromJson(responseMap);
-
       if (response.status == 'success' && response.data != null) {
-        final data = response.data!;
-        isOnline.value = data.isOnline;
-
-        final newStats = {
-          'earnings': '₹${data.totalEarnings}',
-          'trips': '${data.totalTrips}',
-          'online_hours': '${data.onlineHours}h',
-        };
-
-        if (period == null || period == 'today') {
-          stats.value = newStats;
-        }
-
-        earningsData.value = {
-          'earnings': '₹${data.totalEarnings}',
-          'trips': '${data.totalTrips}',
-          'tips': '₹0', // Tips not in current API model
-          'distance': '0 km', // Distance not in current API model
-        };
+        isOnline.value = response.data!.isOnline;
+        return response.data;
       }
     } catch (e) {
-      if (_handleAuthError(e)) return;
-      debugPrint('Error fetching profile summary: $e');
+      if (!_handleAuthError(e)) debugPrint('Error fetching profile summary: $e');
     } finally {
-      summaryLoading.value = false;
+      if (--_summaryCalls == 0) summaryLoading.value = false;
     }
+    return null;
   }
+
+  /// Today's stats plus, when another period is picked, that period's earnings.
+  Future<void> _refreshSummaries() => Future.wait([
+        fetchTodayStats(),
+        if (selectedPeriod.value != 'today') fetchPeriodEarnings(selectedPeriod.value),
+      ]);
 
   void setEarningsPeriod(String period) {
     selectedPeriod.value = period;
-    fetchProfileSummary(period: period);
+    fetchPeriodEarnings(period);
   }
 
   Future<void> fetchRateSettings() async {
@@ -442,7 +519,7 @@ class HomeController extends GetxController with WidgetsBindingObserver {
       HapticFeedback.mediumImpact();
       _toast(successTitle, successMessage);
       if (goToTab != null) ordersTab.value = goToTab;
-      await Future.wait([fetchOrders(silent: true), fetchProfileSummary(period: selectedPeriod.value)]);
+      await Future.wait([fetchOrders(silent: true), _refreshSummaries()]);
     } catch (e) {
       if (_handleAuthError(e)) return;
       if (e is ApiException && e.isOrderCancelled) {
@@ -450,6 +527,9 @@ class HomeController extends GetxController with WidgetsBindingObserver {
         _cancelNoticeShown.add(deliveryId.split(':').first);
         HapticFeedback.heavyImpact();
         _toast('Order cancelled', e.message, error: true);
+      } else if (e is ApiException && e.statusCode == 403) {
+        // e.g. the account was deactivated by the admin.
+        _toast("Can't do that right now", e.message, error: true);
       } else {
         _toast('Action failed', _messageOf(e), error: true);
       }
@@ -485,7 +565,7 @@ class HomeController extends GetxController with WidgetsBindingObserver {
 
   Future<void> refreshAllData() async {
     await Future.wait([
-      fetchProfileSummary(period: selectedPeriod.value),
+      _refreshSummaries(),
       fetchOrders(),
       fetchRateSettings(),
     ]);
